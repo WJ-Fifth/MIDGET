@@ -15,7 +15,7 @@ from dataset.md_seq import MoDaSeq, paired_collate_fn
 
 from utils.log import Logger
 from utils.functional import str2bool, load_data, load_data_aist, check_data_distribution, visualizeAndWrite, \
-    load_test_data_aist, load_test_data
+    load_test_data_aist, load_test_data, dir_setting
 from torch.optim import *
 import warnings
 from tqdm import tqdm
@@ -24,6 +24,7 @@ import pdb
 import numpy as np
 import models
 import datetime
+import utils.build_util as build_util
 
 warnings.filterwarnings('ignore')
 
@@ -35,15 +36,17 @@ class GPT_CALL:
         self.device = None
         self.config = args
         torch.backends.cudnn.benchmark = True
-        self._build()
+        # self._build()
+        self.ckptdir, self.evaldir, self.gtdir, self.visdir, self.expdir = dir_setting(self.config)
+        self.init_models, self.training_data, self.test_loader, self.dance_names, self.optimizer, self.schedular \
+            = build_util.build(config=self.config)
 
     def train(self):
-        vqvae = self.model.eval()
-        gpt = self.model2.train()
+        vqvae = self.init_models[0].eval()
+        gpt = self.init_models[1].train()
 
         config = self.config
         data = self.config.data
-        # criterion = nn.MSELoss()
         training_data = self.training_data
         test_loader = self.test_loader
         optimizer = self.optimizer
@@ -134,7 +137,6 @@ class GPT_CALL:
                         pose_seq = pose_seq.to(self.device)
 
                         quants = vqvae.module.encode(pose_seq)
-                        # print(pose_seq.size())
                         if isinstance(quants, tuple):
                             x = tuple(quants[i][0][:, :1] for i in range(len(quants)))
                         else:
@@ -172,8 +174,6 @@ class GPT_CALL:
             checkpoint = torch.load(config.vqvae_weight)
             vqvae.load_state_dict(checkpoint['model'], strict=False)
 
-            # config = self.config
-            # model = self.model.eval()
             epoch_tested = config.testing.ckpt_epoch
 
             checkpoint = torch.load(config.vqvae_weight)
@@ -193,18 +193,12 @@ class GPT_CALL:
             for i_eval, batch_eval in enumerate(tqdm(self.test_loader, desc='Generating Dance Poses')):
                 # Prepare data
                 # pose_seq_eval = map(lambda x: x.to(self.device), batch_eval)
-                if hasattr(config, 'demo') and config.demo:
-                    music_seq = batch_eval.to(self.device)
-                    quants = (
-                        [torch.ones(1, 1, ).to(self.device).long() * 423],
-                        [torch.ones(1, 1, ).to(self.device).long() * 12])
-                else:
-                    music_seq, pose_seq = batch_eval
-                    music_seq = music_seq.to(self.device)
-                    pose_seq = pose_seq.to(self.device)
+                music_seq, pose_seq = batch_eval
+                music_seq = music_seq.to(self.device)
+                pose_seq = pose_seq.to(self.device)
 
-                    quants = vqvae.module.encode(pose_seq)
-                # print(pose_seq.size())
+                quants = vqvae.module.encode(pose_seq)
+
                 if isinstance(quants, tuple):
                     x = tuple(quants[i][0][:, :1].clone() for i in range(len(quants)))
                 else:
@@ -237,11 +231,10 @@ class GPT_CALL:
 
             visualizeAndWrite(results, config, self.evaldir, self.dance_names, epoch_tested, quants_out)
 
-
     def _build(self):
         config = self.config
         self.start_epoch = 0
-        self._dir_setting()
+        # self._dir_setting()
         self._build_model()
         if not (hasattr(config, 'need_not_train_data') and config.need_not_train_data):
             self._build_train_loader()
@@ -276,8 +269,10 @@ class GPT_CALL:
                                                                                                 'external_wav_rate') else 1
             external_wav_rate = self.config.music_relative_rate if hasattr(self.config,
                                                                            'music_relative_rate') else external_wav_rate
-            train_music_data, train_dance_data = load_data_aist(
-                data.train_dir, interval=data.seq_len, move=self.config.move if hasattr(self.config, 'move') else 64,
+            train_music_data, train_dance_data, _ = load_data_aist(
+                data_dir=data.train_dir,
+                interval=data.seq_len,
+                move=self.config.move if hasattr(self.config, 'move') else 8,
                 rotmat=self.config.rotmat,
                 external_wav=self.config.external_wav if hasattr(self.config, 'external_wav') else None,
                 external_wav_rate=external_wav_rate,

@@ -109,8 +109,8 @@ optimizer:
 # schedular: []
 data:
     name: aist
-#    train_dir: data/aistpp_test_full_wav # There's no problem here. Don't doubt
-    train_dir: data/aistpp_train_wav # There's no problem here. Don't doubt
+    train_dir: data/aistpp_test_full_wav # There's no problem here. Don't doubt
+#    train_dir: data/aistpp_train_wav # There's no problem here. Don't doubt
     test_dir: data/aistpp_test_full_wav
    
     seq_len: 240
@@ -124,7 +124,7 @@ testing:
 need_not_train_data: True
 
 vqvae_weight: 'experiments/sep_vqvae_root/ckpt/epoch_500.pt'
-expname: actor_critic_new
+expname: actor_critic_testdata
 init_weight: 'experiments/motion_gpt_new/ckpt/epoch_80.pt'
 epoch: 10
 batch_size: 32
@@ -148,7 +148,8 @@ use_entropy: False
 entropy_alpha: 0.
 actor_loss_decay: 1
 demo: False
-rl_music_root: data/aistpp_train_wav
+#rl_music_root: data/aistpp_train_wav
+rl_music_root: data/aistpp_test_full_wav
 # sample_shift: 15
 
 # sample_code_length: 150

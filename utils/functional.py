@@ -522,7 +522,7 @@ def load_data_aist(data_dir, interval=240, move=8, rotmat=False, external_wav=No
     tot = 0
     music_data, dance_data = [], []
     fnames = sorted(os.listdir(data_dir))
-    # fnames = fnames[:10]  # For debug
+    fnames = fnames[:10]  # For debug
 
     music_name = []
     if ".ipynb_checkpoints" in fnames:
@@ -568,7 +568,7 @@ def load_data_aist(data_dir, interval=240, move=8, rotmat=False, external_wav=No
                             music_sub_seq_pad[padding_sample:-padding_sample] = music_sub_seq
                             start_sample = padding_sample if i_sample > padding_sample else i_sample
                             end_sample = padding_sample if i_sample + interval_sample + padding_sample < seq_len else seq_len - (
-                                        i_sample + interval_sample)
+                                    i_sample + interval_sample)
                             music_sub_seq_pad[padding_sample - start_sample:padding_sample] = np_music[
                                                                                               i_sample - start_sample:i_sample]
                             if end_sample == padding_sample:
@@ -595,7 +595,7 @@ def load_test_data(data_dir, data_type='2D'):
     tot = 0
     music_data, dance_data = [], []
     fnames = sorted(os.listdir(data_dir))
-    # fnames = fnames[:10]  # For debug
+    fnames = fnames[:10]  # For debug
 
     for fname in fnames:
         path = os.path.join(data_dir, fname)
@@ -623,7 +623,7 @@ def load_test_data_aist(data_dir, rotmat, move, external_wav=None, external_wav_
 
     music_data, dance_data = [], []
     fnames = sorted(os.listdir(data_dir))
-    # fnames = fnames[:10]  # For debug
+    fnames = fnames[:10]  # For debug
 
     for fname in fnames:
         path = os.path.join(data_dir, fname)
@@ -948,43 +948,6 @@ def pkl_to_19point(pkl_root, config=None):
         np_dance_trans[:, 16] = np_dance2[:, 21]
         np_dance_trans[:, 17] = np_dance2[:, 11]
         np_dance_trans[:, 18] = np_dance2[:, 10]
-        # np_dance_trans[:, 0] = np_dance2[:, 0]
-
-        # #neck
-        # np_dance_trans[:, 1] = np_dance2[:, 9]
-
-        # # left up
-        # np_dance_trans[:, 2] = np_dance2[:, 16]
-        # np_dance_trans[:, 3] = np_dance2[:, 18]
-        # np_dance_trans[:, 4] = np_dance2[:, 20]
-
-        # # right up
-        # np_dance_trans[:, 5] = np_dance2[:, 17]
-        # np_dance_trans[:, 6] = np_dance2[:, 19]
-        # np_dance_trans[:, 7] = np_dance2[:, 21]
-
-        # np_dance_trans[:, 8] = np_dance2[:, 0]
-
-        # np_dance_trans[:, 9] = np_dance2[:, 1]
-        # np_dance_trans[:, 10] = np_dance2[:, 4]
-        # np_dance_trans[:, 11] = np_dance2[:, 7]
-
-        # np_dance_trans[:, 12] = np_dance2[:, 2]
-        # np_dance_trans[:, 13] = np_dance2[:, 5]
-        # np_dance_trans[:, 14] = np_dance2[:, 8]
-
-        # np_dance_trans[:, 15] = np_dance2[:, 15]
-        # np_dance_trans[:, 16] = np_dance2[:, 15]
-        # np_dance_trans[:, 17] = np_dance2[:, 15]
-        # np_dance_trans[:, 18] = np_dance2[:, 15]
-
-        # np_dance_trans[:, 19] = np_dance2[:, 11]
-        # np_dance_trans[:, 20] = np_dance2[:, 11]
-        # np_dance_trans[:, 21] = np_dance2[:, 8]
-
-        # np_dance_trans[:, 22] = np_dance2[:, 10]
-        # np_dance_trans[:, 23] = np_dance2[:, 10]
-        # np_dance_trans[:, 24] = np_dance2[:, 7]
 
         # np_dances.append(np_dance_trans.reshape([b, 25*2]))
         with open(os.path.join(pkl_root, '19points', pkl_name + '.txt'), 'w+') as file:
@@ -997,21 +960,66 @@ def pkl_to_19point(pkl_root, config=None):
                         else:
                             file.write('\n')
 
-    # write2pkl(dance_datas, dance_names, config.testing, expdir, epoch, rotmat=config.rotmat)
-    # write2json(np_dances, dance_names,config, pkl_root, 123221)
-    # visualize(config, dance_names, pkl_root, 123221, quants=None)
-    # img2video(pkl_root,12321)
 
-    # json_dir = os.path.join(pkl_root, "jsons",f"ep{epoch:06d}")
-    # img_dir = os.path.join(pkl_root, "imgs",f"ep{epoch:06d}")
-    # if os.path.exists(json_dir):    
-    #     shutil.rmtree(json_dir)
+def dir_setting(config):
+    data = config.data
+    expname = config.expname
+    experiment_dir = os.path.join("../GMWM/", "experiments")
+    expdir = os.path.join(experiment_dir, expname)
 
-# def main():
-#     config = {'height': 1280, 'width': 720, 'ckpt_epoch': 10}
+    if not os.path.exists(expdir):
+        os.mkdir(expdir)
 
-#     visualize()
+    visdir = os.path.join(expdir, "vis")  # -- imgs, videos, jsons
+    if not os.path.exists(visdir):
+        os.mkdir(visdir)
 
+    jsondir = os.path.join(visdir, "jsons")  # -- imgs, videos, jsons
+    if not os.path.exists(jsondir):
+        os.mkdir(jsondir)
 
-# if __name__ == '__main__':
-#     main()
+    histdir = os.path.join(visdir, "hist")  # -- imgs, videos, jsons
+    if not os.path.exists(histdir):
+        os.mkdir(histdir)
+
+    imgsdir = os.path.join(visdir, "imgs")  # -- imgs, videos, jsons
+    if not os.path.exists(imgsdir):
+        os.mkdir(imgsdir)
+
+    videodir = os.path.join(visdir, "videos")  # -- imgs, videos, jsons
+    if not os.path.exists(videodir):
+        os.mkdir(videodir)
+
+    ckptdir = os.path.join(expdir, "ckpt")
+    if not os.path.exists(ckptdir):
+        os.mkdir(ckptdir)
+
+    evaldir = os.path.join(expdir, "eval")
+    if not os.path.exists(evaldir):
+        os.mkdir(evaldir)
+
+    gtdir = os.path.join(expdir, "gt")
+    if not os.path.exists(gtdir):
+        os.mkdir(gtdir)
+
+    jsondir1 = os.path.join(evaldir, "jsons")  # -- imgs, videos, jsons
+    if not os.path.exists(jsondir1):
+        os.mkdir(jsondir1)
+
+    histdir1 = os.path.join(evaldir, "hist")  # -- imgs, videos, jsons
+    if not os.path.exists(histdir1):
+        os.mkdir(histdir1)
+
+    imgsdir1 = os.path.join(evaldir, "imgs")  # -- imgs, videos, jsons
+    if not os.path.exists(imgsdir1):
+        os.mkdir(imgsdir1)
+
+    videodir1 = os.path.join(evaldir, "videos")  # -- imgs, videos, jsons
+    if not os.path.exists(videodir1):
+        os.mkdir(videodir1)
+
+    sampledir = os.path.join(evaldir, "samples")  # -- imgs, videos, jsons
+    if not os.path.exists(sampledir):
+        os.mkdir(sampledir)
+
+    return ckptdir, evaldir, gtdir, visdir, expdir

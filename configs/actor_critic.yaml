@@ -123,7 +123,7 @@ testing:
 need_not_train_data: True
 
 vqvae_weight: 'experiments/sep_vqvae_root/ckpt/epoch_500.pt'
-expname: actor_critic
+expname: actor_critic_T
 init_weight: 'experiments/cc_motion_gpt/ckpt/epoch_400.pt'
 epoch: 500
 batch_size: 128

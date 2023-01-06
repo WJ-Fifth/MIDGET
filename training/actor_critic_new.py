@@ -25,12 +25,10 @@ music_root = None
 
 
 def get_beat(key, music_root):
-    music_root_a = music_root
-    path = os.path.join(music_root_a, key)
+    path = os.path.join(music_root, key)
     with open(path) as f:
         sample_dict = json.loads(f.read())
         beats = np.array(sample_dict['music_array'])[:, 53]
-        # print(f)
 
         return beats
 
@@ -48,7 +46,8 @@ class Actor_Critic:
         gpt.module.freeze_drop()
 
         config = self.config
-        training_data = self.training_data
+        # training_data = self.training_data
+        training_data = self.test_loader
         test_loader = self.test_loader
         optimizer = self.optimizer
         log = Logger(self.config, self.expdir)
@@ -78,13 +77,6 @@ class Actor_Critic:
             music_seqs = []
             beat_seqs = []
             for batch_i, batch in enumerate(training_data):
-                if len(batch) != 2:
-                    print("False")
-                    print(batch[0].shape)
-                    print(batch[1].shape)
-                    print(batch[2].shape)
-                    print(batch[3].shape)
-                    exit()
                 music_seq, pose_seq = batch
                 music_seq = music_seq.to(self.device)
                 pose_seq = pose_seq.to(self.device)
@@ -95,17 +87,14 @@ class Actor_Critic:
                 # 1. generate motion on whole music (no grad)
                 # NOTE the generation here should be consistent with the evaluation process (generate whole piece)
                 with torch.no_grad():
-                    if hasattr(config, 'demo') and config.demo:
-                        x = x
+                    quants_pred = vqvae.module.encode(pose_seq)
+                    if isinstance(quants_pred, tuple):
+                        quants = tuple(
+                            quants_pred[ii][0][:, :-1].clone().detach() for ii in range(len(quants_pred)))
+                        x = tuple(quants_pred[i][0][:, :1] for i in range(len(quants_pred)))
                     else:
-                        quants_pred = vqvae.module.encode(pose_seq)
-                        if isinstance(quants_pred, tuple):
-                            quants = tuple(
-                                quants_pred[ii][0][:, :-1].clone().detach() for ii in range(len(quants_pred)))
-                            x = tuple(quants_pred[i][0][:, :1] for i in range(len(quants_pred)))
-                        else:
-                            quants = quants_pred[0]
-                            x = quants_pred[0][:, :1]
+                        quants = quants_pred[0]
+                        x = quants_pred[0][:, :1]
 
                     gpt.eval()
                     zs = gpt.module.sample(x, cond=music_seq,
@@ -118,7 +107,7 @@ class Actor_Critic:
 
             # 2. sample music-motion pair from generated data
             train_data = prepare_dataloader(music_seqs, (dance_up_seqs, dance_down_seqs), beat_seqs,
-                                               self.config.batch_size, self.config.structure_generate.block_size + 1)
+                                            self.config.batch_size, self.config.structure_generate.block_size + 1)
 
             log.set_progress(epoch_i, len(train_data))
 
@@ -182,8 +171,8 @@ class Actor_Critic:
                     gpt.train()
                     gpt.module.freeze_drop()
 
-                # if need entropy loss; 
-                # entropy loss is a common regularization in RL but we don't use finally
+                # if you need entropy loss;
+                # entropy loss is a common regularization in RL, but we don't use finally
                 if hasattr(config, 'entropy_alpha'):
                     alpha = config.entropy_alpha
                     td_error = td_error.view(-1) + alpha * entropy.clone().detach()
@@ -202,7 +191,6 @@ class Actor_Critic:
                         (actor_loss * td_error.view(-1).clone().detach() - alpha * entropy) * mask_seq.view(
                             -1).clone().detach()) / torch.sum(mask_seq).clone().detach() * config.actor_loss_decay
 
-                    # loss = torch.mean(actor_loss * td_error.view(-1).clone().detach() - alpha * entropy) * config.actor_loss_decay
                     actor_loss = torch.sum(actor_loss * mask_seq.view(-1).clone().detach()) / torch.sum(
                         mask_seq).clone().detach()
                 # if training critic net:
@@ -301,23 +289,14 @@ class Actor_Critic:
             gpt.eval()
 
             results = []
-            random_id = 0  # np.random.randint(0, 1e4)
-            # quants = {}
             quants_out = {}
             for i_eval, batch_eval in enumerate(tqdm(self.test_loader, desc='Generating Dance Poses')):
                 # Prepare data
-                # pose_seq_eval = map(lambda x: x.to(self.device), batch_eval)
-                if hasattr(config, 'demo') and config.demo:
-                    music_seq = batch_eval.to(self.device)
-                    quants = (
-                        [torch.ones(1, 1, ).to(self.device).long() * 423],
-                        [torch.ones(1, 1, ).to(self.device).long() * 12])
-                else:
-                    music_seq, pose_seq = batch_eval
-                    music_seq = music_seq.to(self.device)
-                    pose_seq = pose_seq.to(self.device)
+                music_seq, pose_seq = batch_eval
+                music_seq = music_seq.to(self.device)
+                pose_seq = pose_seq.to(self.device)
 
-                    quants = vqvae.module.encode(pose_seq)
+                quants = vqvae.module.encode(pose_seq)
 
                 if isinstance(quants, tuple):
                     x = tuple(quants[i][0][:, :1] for i in range(len(quants)))
@@ -500,7 +479,7 @@ class Actor_Critic:
             shuffle=True,
             pin_memory=True
         )
-        self.dance_names = dance_names
+        # self.dance_names = dance_names
 
     def _build_test_loader(self):
         config = self.config
