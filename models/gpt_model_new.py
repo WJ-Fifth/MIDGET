@@ -37,14 +37,14 @@ class GPT_Model(nn.Module):
             block_shift = block_size
         x_up, x_down = xs
 
-        for k in range(cond.size(1)//8):
+        for k in range(cond.size(1) // 8):
             x_cond_up = x_up if x_up.size(1) <= block_size else x_up[:, -(
-                        block_shift + (k - block_size - 1) % (block_size - block_shift + 1)):]
+                    block_shift + (k - block_size - 1) % (block_size - block_shift + 1)):]
             x_cond_down = x_down if x_down.size(1) <= block_size else x_down[:, -(
-                        block_shift + (k - block_size - 1) % (block_size - block_shift + 1)):]  # crop context if needed
+                    block_shift + (k - block_size - 1) % (block_size - block_shift + 1)):]  # crop context if needed
 
-            cond_input = cond[:, :(k+1) * 8] if k < block_size else cond[:, (k - (
-                        block_shift + (k - block_size - 1) % (block_size - block_shift + 1)) + 1) * 8 : (k + 1) * 8]
+            cond_input = cond[:, :(k + 1) * 8] if k < block_size else cond[:, (k - (
+                    block_shift + (k - block_size - 1) % (block_size - block_shift + 1)) + 1) * 8: (k + 1) * 8]
 
             logits, _ = self.forward((x_cond_up, x_cond_down), cond_input)
             # jj += 1
@@ -63,7 +63,7 @@ class GPT_Model(nn.Module):
             x_up = torch.cat((x_up, ix_up), dim=1)
             x_down = torch.cat((x_down, ix_down), dim=1)
 
-        return ([x_up], [x_down])
+        return [x_up], [x_down]
 
     def forward(self, idxs, cond, targets=None):
         idx_up, idx_down = idxs
@@ -74,11 +74,12 @@ class GPT_Model(nn.Module):
 
         music_feature = self.music_downsample(cond)
         if music_feature.shape[0] > 1:
-            input_music_feature = music_feature[:, 1:]
+            input_music_feature = music_feature[:, :-1]
         else:
             input_music_feature = music_feature
 
         feat = self.gpt_base(idx_up, idx_down, input_music_feature)
+
         logits_up, logits_down, loss_up, loss_down = self.gpt_head(feat, targets)
 
         if loss_up is not None and loss_down is not None:
@@ -117,7 +118,6 @@ class MusicDownSample(nn.Module):
         self.model = nn.Sequential(*blocks)
 
     def forward(self, x):
-
         x_in = self.preprocess(x)
         x_out = self.model(x_in)
         x_out = self.postprocess(x_out)
@@ -222,6 +222,7 @@ class CrossCondGPTBase(nn.Module):
         self.block_size = config.block_size
 
         self.apply(self._init_weights)
+
     def get_block_size(self):
         return self.block_size
 
@@ -290,6 +291,7 @@ class CrossCondGPTBase(nn.Module):
 
         # forward the GPT model
         # if self.requires_head:
+
         token_embeddings_up = self.tok_emb_up(idx_up)  # each index maps to a (learnable) vector
         token_embeddings_down = self.tok_emb_down(idx_down)  # each index maps to a (learnable) vector
         token_embeddings = torch.cat([self.cond_emb(cond), token_embeddings_up, token_embeddings_down], dim=1)

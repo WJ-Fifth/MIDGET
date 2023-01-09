@@ -23,26 +23,6 @@ def calculate_strides(strides, downs):
     return [stride ** down for stride, down in zip(strides, downs)]
 
 
-# def _loss_fn(loss_fn, x_target, x_pred, hps):
-#     if loss_fn == 'l1':
-#         return t.mean(t.abs(x_pred - x_target)) / hps.bandwidth['l1']
-#     elif loss_fn == 'l2':
-#         return t.mean((x_pred - x_target) ** 2) / hps.bandwidth['l2']
-#     elif loss_fn == 'linf':
-#         residual = ((x_pred - x_target) ** 2).reshape(x_target.shape[0], -1)
-#         values, _ = t.topk(residual, hps.linf_k, dim=1)
-#         return t.mean(values) / hps.bandwidth['l2']
-#     elif loss_fn == 'lmix':
-#         loss = 0.0
-#         if hps.lmix_l1:
-#             loss += hps.lmix_l1 * _loss_fn('l1', x_target, x_pred, hps)
-#         if hps.lmix_l2:
-#             loss += hps.lmix_l2 * _loss_fn('l2', x_target, x_pred, hps)
-#         if hps.lmix_linf:
-#             loss += hps.lmix_linf * _loss_fn('linf', x_target, x_pred, hps)
-#         return loss
-#     else:
-#         assert False, f"Unknown loss_fn {loss_fn}"
 def _loss_fn(x_target, x_pred):
     return torch.mean(torch.abs(x_pred - x_target))
 
@@ -64,11 +44,6 @@ class VQVAER(nn.Module):
         # multispectral = hps.multispectral
         multipliers = hps.hvqvae_multipliers
         use_bottleneck = hps.use_bottleneck
-
-        # if use_bottleneck:
-        #     print('We use bottleneck!')
-        # else:
-        #     print('We do not use bottleneck!')
 
         if not hasattr(hps, 'dilation_cycle'):
             hps.dilation_cycle = None
@@ -185,7 +160,6 @@ class VQVAER(nn.Module):
 
     def encode(self, x, start_level=0, end_level=None, bs_chunks=1):
         x[:, :, :self.hps.joint_channel] = 0
-        # print(x.shape)
         x_chunks = torch.chunk(x, bs_chunks, dim=0)
         zs_list = []
         for x_i in x_chunks:

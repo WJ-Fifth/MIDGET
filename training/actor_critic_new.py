@@ -8,7 +8,7 @@ from dataset.md_seq import MoDaSeq
 from dataset.md_seq_ac import MoDaSeqAC
 
 from utils.log import Logger
-from utils.functional import visualizeAndWrite, load_test_data_aist, load_data_aist
+from utils.functional import visualizeAndWrite, load_test_data_aist, load_data_aist, dir_setting
 import warnings
 from tqdm import tqdm
 import itertools
@@ -18,6 +18,7 @@ import datetime
 
 import json
 import matplotlib.pyplot as plt
+import utils.build_util as build_util
 
 warnings.filterwarnings('ignore')
 
@@ -38,11 +39,14 @@ class Actor_Critic:
         self.device = None
         self.config = args
         torch.backends.cudnn.benchmark = True
-        self._build()
+        # self._build()
+        self.ckptdir, self.evaldir, self.gtdir, self.visdir, self.expdir = dir_setting(self.config)
+        self.init_models, self.training_data, self.test_loader, self.dance_names, self.optimizer, self.schedular \
+            = build_util.build(config=self.config)
 
     def train(self):
-        vqvae = self.model.eval()
-        gpt = self.model2.train()
+        vqvae = self.init_models[0].eval()
+        gpt = self.init_models[1].train()
         gpt.module.freeze_drop()
 
         config = self.config
@@ -271,8 +275,8 @@ class Actor_Critic:
 
     def eval(self):
         with torch.no_grad():
-            vqvae = self.model.eval()
-            gpt = self.model2.eval()
+            vqvae = self.init_models[0].eval()
+            gpt = self.init_models[1].train()
 
             config = self.config
 
@@ -362,7 +366,6 @@ class Actor_Critic:
 
         for i_eval, batch_eval in enumerate(tqdm(self.training_data, desc='Generating Dance Poses')):
             # Prepare data
-            # pose_seq_eval = map(lambda x: x.to(self.device), batch_eval)
             pose_seq_eval = batch_eval.to(self.device)
 
             quants = model.module.encode(pose_seq_eval)[0].cpu().data.numpy()
@@ -419,180 +422,181 @@ class Actor_Critic:
                         pose_sample[:, iii, :3] = pose_sample[:, iii - 1, :3] + global_vel[:, iii - 1, :]
                 results.append(pose_sample)
         visualizeAndWrite(results, config, self.sampledir, names, epoch_tested, quants)
+#
+#     def _build(self):
+#         config = self.config
+#         self.start_epoch = 0
+#         self._dir_setting()
+#         self._build_model()
+#         if not (hasattr(config, 'need_not_train_data') and config.need_not_train_data):
+#             self._build_train_loader()
+#         if not (hasattr(config, 'need_not_test_data') and config.need_not_train_data):
+#             self._build_test_loader()
+#         self._build_optimizer()
+#
+#     def _build_model(self):
+#         """ Define Model """
+#         config = self.config
+#         if hasattr(config.structure, 'name') and hasattr(config.structure_generate, 'name'):
+#             print(f'using {config.structure.name} and {config.structure_generate.name} ')
+#             model_class = getattr(models, config.structure.name)
+#             model = model_class(config.structure)
+#
+#             model_class2 = getattr(models, config.structure_generate.name)
+#             model2 = model_class2(config.structure_generate)
+#
+#             model_reward = getattr(models, config.reward.name)
+#             reward = model_reward(config.reward)
+#         else:
+#             raise NotImplementedError("Wrong Model Selection")
+#
+#         model = nn.DataParallel(model)
+#         model2 = nn.DataParallel(model2)
+#         dance_reward = nn.DataParallel(reward)
+#         self.dance_reward = dance_reward.cuda()
+#         self.model2 = model2.cuda()
+#         self.model = model.cuda()
+#
+#     def _build_train_loader(self):
+#
+#         data = self.config.data
+#         print("train with AIST++ dataset!")
+#         external_wav_rate = self.config.ds_rate // self.config.external_wav_rate if hasattr(self.config,
+#                                                                                             'external_wav_rate') else 1
+#         external_wav_rate = self.config.music_relative_rate if hasattr(self.config,
+#                                                                        'music_relative_rate') else external_wav_rate
+#         train_music_data, train_dance_data, dance_names = load_data_aist(
+#             data.train_dir, interval=data.seq_len, move=self.config.move if hasattr(self.config, 'move') else 64,
+#             rotmat=self.config.rotmat,
+#             external_wav=self.config.external_wav if hasattr(self.config, 'external_wav') else None,
+#             external_wav_rate=external_wav_rate,
+#             wav_padding=self.config.wav_padding * (
+#                     self.config.ds_rate // self.config.music_relative_rate) if hasattr(self.config,
+#                                                                                        'wav_padding') else 0)
+#
+#         # exit()
+#         self.training_data = torch.utils.data.DataLoader(
+#             MoDaSeq(train_music_data, train_dance_data),
+#             num_workers=8,
+#             batch_size=self.config.batch_size,
+#             shuffle=True,
+#             pin_memory=True
+#         )
+#         # self.dance_names = dance_names
+#
+#     def _build_test_loader(self):
+#         config = self.config
+#         data = self.config.data
+#         print("test with AIST++ dataset!")
+#         music_data, dance_data, dance_names = load_test_data_aist(
+#             data.test_dir,
+#             move=config.move,
+#             rotmat=config.rotmat,
+#             external_wav=config.external_wav if hasattr(self.config, 'external_wav') else None,
+#             external_wav_rate=self.config.external_wav_rate if hasattr(self.config, 'external_wav_rate') else 1,
+#             wav_padding=self.config.wav_padding * (
+#                     self.config.ds_rate // self.config.music_relative_rate) if hasattr(self.config,
+#                                                                                        'wav_padding') else 0)
+#
+#         self.test_loader = torch.utils.data.DataLoader(
+#             MoDaSeq(music_data, dance_data),
+#             batch_size=1,
+#             shuffle=False
+#         )
+#         self.dance_names = dance_names
+#
+#     def _build_optimizer(self):
+#         # model = nn.DataParallel(model).to(device)
+#         config = self.config.optimizer
+#         try:
+#             optim = getattr(torch.optim, config.type)
+#         except Exception:
+#             raise NotImplementedError('not implemented optim method ' + config.type)
+#
+#         self.optimizer = optim(itertools.chain(self.model2.module.parameters(),
+#                                                ),
+#                                **config.kwargs)
+#         self.schedular = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, **config.schedular_kwargs)
+#
+#     def _dir_setting(self):
+#         data = self.config.data
+#         self.expname = self.config.expname
+#         self.experiment_dir = os.path.join("../GMWM/", "experiments")
+#         self.expdir = os.path.join(self.experiment_dir, self.expname)
+#
+#         if not os.path.exists(self.expdir):
+#             os.mkdir(self.expdir)
+#
+#         self.visdir = os.path.join(self.expdir, "vis")  # -- imgs, videos, jsons
+#         if not os.path.exists(self.visdir):
+#             os.mkdir(self.visdir)
+#
+#         self.jsondir = os.path.join(self.visdir, "jsons")  # -- imgs, videos, jsons
+#         if not os.path.exists(self.jsondir):
+#             os.mkdir(self.jsondir)
+#
+#         self.histdir = os.path.join(self.visdir, "hist")  # -- imgs, videos, jsons
+#         if not os.path.exists(self.histdir):
+#             os.mkdir(self.histdir)
+#
+#         self.imgsdir = os.path.join(self.visdir, "imgs")  # -- imgs, videos, jsons
+#         if not os.path.exists(self.imgsdir):
+#             os.mkdir(self.imgsdir)
+#
+#         self.videodir = os.path.join(self.visdir, "videos")  # -- imgs, videos, jsons
+#         if not os.path.exists(self.videodir):
+#             os.mkdir(self.videodir)
+#
+#         self.ckptdir = os.path.join(self.expdir, "ckpt")
+#         if not os.path.exists(self.ckptdir):
+#             os.mkdir(self.ckptdir)
+#
+#         self.evaldir = os.path.join(self.expdir, "eval")
+#         if not os.path.exists(self.evaldir):
+#             os.mkdir(self.evaldir)
+#
+#         self.gtdir = os.path.join(self.expdir, "gt")
+#         if not os.path.exists(self.gtdir):
+#             os.mkdir(self.gtdir)
+#
+#         self.jsondir1 = os.path.join(self.evaldir, "jsons")  # -- imgs, videos, jsons
+#         if not os.path.exists(self.jsondir1):
+#             os.mkdir(self.jsondir1)
+#
+#         self.histdir1 = os.path.join(self.evaldir, "hist")  # -- imgs, videos, jsons
+#         if not os.path.exists(self.histdir1):
+#             os.mkdir(self.histdir1)
+#
+#         self.imgsdir1 = os.path.join(self.evaldir, "imgs")  # -- imgs, videos, jsons
+#         if not os.path.exists(self.imgsdir1):
+#             os.mkdir(self.imgsdir1)
+#
+#         self.videodir1 = os.path.join(self.evaldir, "videos")  # -- imgs, videos, jsons
+#         if not os.path.exists(self.videodir1):
+#             os.mkdir(self.videodir1)
+#
+#         self.sampledir = os.path.join(self.evaldir, "samples")  # -- imgs, videos, jsons
+#         if not os.path.exists(self.sampledir):
+#             os.mkdir(self.sampledir)
+#
+#         # self.ckptdir = os.path.join(self.expdir, "ckpt")
+#         # if not os.path.exists(self.ckptdir):
+#         #     os.mkdir(self.ckptdir)
+#
+#
+# def prepare_dataloader(music_data, dance_data, beat_data, batch_size, interval):
+#     modaac = MoDaSeqAC(music_data, dance_data, beat_data, interval)
+#     sampler = torch.utils.data.RandomSampler(modaac, replacement=True)
+#
+#     data_loader = torch.utils.data.DataLoader(
+#         modaac,
+#         num_workers=8,
+#         batch_size=batch_size,
+#         # shuffle=True,
+#         sampler=sampler,
+#         pin_memory=True
+#         # collate_fn=paired_collate_fn,
+#     )
+#
+#     return data_loader
 
-    def _build(self):
-        config = self.config
-        self.start_epoch = 0
-        self._dir_setting()
-        self._build_model()
-        if not (hasattr(config, 'need_not_train_data') and config.need_not_train_data):
-            self._build_train_loader()
-        if not (hasattr(config, 'need_not_test_data') and config.need_not_train_data):
-            self._build_test_loader()
-        self._build_optimizer()
-
-    def _build_model(self):
-        """ Define Model """
-        config = self.config
-        if hasattr(config.structure, 'name') and hasattr(config.structure_generate, 'name'):
-            print(f'using {config.structure.name} and {config.structure_generate.name} ')
-            model_class = getattr(models, config.structure.name)
-            model = model_class(config.structure)
-
-            model_class2 = getattr(models, config.structure_generate.name)
-            model2 = model_class2(config.structure_generate)
-
-            model_reward = getattr(models, config.reward.name)
-            reward = model_reward(config.reward)
-        else:
-            raise NotImplementedError("Wrong Model Selection")
-
-        model = nn.DataParallel(model)
-        model2 = nn.DataParallel(model2)
-        dance_reward = nn.DataParallel(reward)
-        self.dance_reward = dance_reward.cuda()
-        self.model2 = model2.cuda()
-        self.model = model.cuda()
-
-    def _build_train_loader(self):
-
-        data = self.config.data
-        print("train with AIST++ dataset!")
-        external_wav_rate = self.config.ds_rate // self.config.external_wav_rate if hasattr(self.config,
-                                                                                            'external_wav_rate') else 1
-        external_wav_rate = self.config.music_relative_rate if hasattr(self.config,
-                                                                       'music_relative_rate') else external_wav_rate
-        train_music_data, train_dance_data, dance_names = load_data_aist(
-            data.train_dir, interval=data.seq_len, move=self.config.move if hasattr(self.config, 'move') else 64,
-            rotmat=self.config.rotmat,
-            external_wav=self.config.external_wav if hasattr(self.config, 'external_wav') else None,
-            external_wav_rate=external_wav_rate,
-            wav_padding=self.config.wav_padding * (
-                    self.config.ds_rate // self.config.music_relative_rate) if hasattr(self.config,
-                                                                                       'wav_padding') else 0)
-
-        # exit()
-        self.training_data = torch.utils.data.DataLoader(
-            MoDaSeq(train_music_data, train_dance_data),
-            num_workers=8,
-            batch_size=self.config.batch_size,
-            shuffle=True,
-            pin_memory=True
-        )
-        # self.dance_names = dance_names
-
-    def _build_test_loader(self):
-        config = self.config
-        data = self.config.data
-        print("test with AIST++ dataset!")
-        music_data, dance_data, dance_names = load_test_data_aist(
-            data.test_dir,
-            move=config.move,
-            rotmat=config.rotmat,
-            external_wav=config.external_wav if hasattr(self.config, 'external_wav') else None,
-            external_wav_rate=self.config.external_wav_rate if hasattr(self.config, 'external_wav_rate') else 1,
-            wav_padding=self.config.wav_padding * (
-                    self.config.ds_rate // self.config.music_relative_rate) if hasattr(self.config,
-                                                                                       'wav_padding') else 0)
-
-        self.test_loader = torch.utils.data.DataLoader(
-            MoDaSeq(music_data, dance_data),
-            batch_size=1,
-            shuffle=False
-        )
-        self.dance_names = dance_names
-
-    def _build_optimizer(self):
-        # model = nn.DataParallel(model).to(device)
-        config = self.config.optimizer
-        try:
-            optim = getattr(torch.optim, config.type)
-        except Exception:
-            raise NotImplementedError('not implemented optim method ' + config.type)
-
-        self.optimizer = optim(itertools.chain(self.model2.module.parameters(),
-                                               ),
-                               **config.kwargs)
-        self.schedular = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, **config.schedular_kwargs)
-
-    def _dir_setting(self):
-        data = self.config.data
-        self.expname = self.config.expname
-        self.experiment_dir = os.path.join("../GMWM/", "experiments")
-        self.expdir = os.path.join(self.experiment_dir, self.expname)
-
-        if not os.path.exists(self.expdir):
-            os.mkdir(self.expdir)
-
-        self.visdir = os.path.join(self.expdir, "vis")  # -- imgs, videos, jsons
-        if not os.path.exists(self.visdir):
-            os.mkdir(self.visdir)
-
-        self.jsondir = os.path.join(self.visdir, "jsons")  # -- imgs, videos, jsons
-        if not os.path.exists(self.jsondir):
-            os.mkdir(self.jsondir)
-
-        self.histdir = os.path.join(self.visdir, "hist")  # -- imgs, videos, jsons
-        if not os.path.exists(self.histdir):
-            os.mkdir(self.histdir)
-
-        self.imgsdir = os.path.join(self.visdir, "imgs")  # -- imgs, videos, jsons
-        if not os.path.exists(self.imgsdir):
-            os.mkdir(self.imgsdir)
-
-        self.videodir = os.path.join(self.visdir, "videos")  # -- imgs, videos, jsons
-        if not os.path.exists(self.videodir):
-            os.mkdir(self.videodir)
-
-        self.ckptdir = os.path.join(self.expdir, "ckpt")
-        if not os.path.exists(self.ckptdir):
-            os.mkdir(self.ckptdir)
-
-        self.evaldir = os.path.join(self.expdir, "eval")
-        if not os.path.exists(self.evaldir):
-            os.mkdir(self.evaldir)
-
-        self.gtdir = os.path.join(self.expdir, "gt")
-        if not os.path.exists(self.gtdir):
-            os.mkdir(self.gtdir)
-
-        self.jsondir1 = os.path.join(self.evaldir, "jsons")  # -- imgs, videos, jsons
-        if not os.path.exists(self.jsondir1):
-            os.mkdir(self.jsondir1)
-
-        self.histdir1 = os.path.join(self.evaldir, "hist")  # -- imgs, videos, jsons
-        if not os.path.exists(self.histdir1):
-            os.mkdir(self.histdir1)
-
-        self.imgsdir1 = os.path.join(self.evaldir, "imgs")  # -- imgs, videos, jsons
-        if not os.path.exists(self.imgsdir1):
-            os.mkdir(self.imgsdir1)
-
-        self.videodir1 = os.path.join(self.evaldir, "videos")  # -- imgs, videos, jsons
-        if not os.path.exists(self.videodir1):
-            os.mkdir(self.videodir1)
-
-        self.sampledir = os.path.join(self.evaldir, "samples")  # -- imgs, videos, jsons
-        if not os.path.exists(self.sampledir):
-            os.mkdir(self.sampledir)
-
-        # self.ckptdir = os.path.join(self.expdir, "ckpt")
-        # if not os.path.exists(self.ckptdir):
-        #     os.mkdir(self.ckptdir)
-
-
-def prepare_dataloader(music_data, dance_data, beat_data, batch_size, interval):
-    modaac = MoDaSeqAC(music_data, dance_data, beat_data, interval)
-    sampler = torch.utils.data.RandomSampler(modaac, replacement=True)
-
-    data_loader = torch.utils.data.DataLoader(
-        modaac,
-        num_workers=8,
-        batch_size=batch_size,
-        # shuffle=True,
-        sampler=sampler,
-        pin_memory=True
-        # collate_fn=paired_collate_fn,
-    )
-
-    return data_loader

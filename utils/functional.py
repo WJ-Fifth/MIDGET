@@ -530,6 +530,7 @@ def load_data_aist(data_dir, interval=240, move=8, rotmat=False, external_wav=No
 
     for fname in fnames:
         path = os.path.join(data_dir, fname)
+
         with open(path) as f:
             sample_dict = json.loads(f.read())
 
@@ -537,8 +538,8 @@ def load_data_aist(data_dir, interval=240, move=8, rotmat=False, external_wav=No
             if external_wav is not None:
                 wav_path = os.path.join(external_wav, fname.split('_')[-2] + '.json')
                 # print('load from external wav!')
-                with open(wav_path) as ff:
-                    sample_dict_wav = json.loads(ff.read())
+                with open(wav_path) as sample:
+                    sample_dict_wav = json.loads(sample.read())
                     np_music = np.array(sample_dict_wav['music_array']).astype(np.float32)
 
             np_dance = np.array(sample_dict['dance_array'])
@@ -559,11 +560,13 @@ def load_data_aist(data_dir, interval=240, move=8, rotmat=False, external_wav=No
                     dance_sub_seq = np_dance[i: i + interval]
 
                     if len(music_sub_seq) == interval_sample and len(dance_sub_seq) == interval:
+                        # print(music_sub_seq.shape, "music sub sequence")
+                        # print(dance_sub_seq.shape, "dance sub sequence")
+
                         padding_sample = wav_padding // music_sample_rate
                         # Add paddings/context of music
                         music_sub_seq_pad = np.zeros((interval_sample + padding_sample * 2, dim),
                                                      dtype=music_sub_seq.dtype)
-
                         if padding_sample > 0:
                             music_sub_seq_pad[padding_sample:-padding_sample] = music_sub_seq
                             start_sample = padding_sample if i_sample > padding_sample else i_sample
@@ -587,7 +590,6 @@ def load_data_aist(data_dir, interval=240, move=8, rotmat=False, external_wav=No
                 music_data.append(np_music)
                 dance_data.append(np_dance)
                 music_name.append(fname)
-
     return music_data, dance_data, music_name
 
 

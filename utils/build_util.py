@@ -3,8 +3,7 @@ import torch.nn as nn
 import torch.utils.data
 from dataset.md_seq import MoDaSeq, paired_collate_fn
 
-from utils.functional import str2bool, load_data, load_data_aist, check_data_distribution, visualizeAndWrite, \
-    load_test_data_aist, load_test_data, dir_setting
+from utils.functional import load_data, load_data_aist, load_test_data_aist
 import itertools
 import models
 
@@ -45,28 +44,22 @@ def _build_model(config):
 
 def _build_train_loader(config):
     data = config.data
-    if data.name == "aist":
-        print("train with AIST++ dataset!")
-        external_wav_rate = config.ds_rate // config.external_wav_rate if hasattr(config,
-                                                                                  'external_wav_rate') else 1
-        external_wav_rate = config.music_relative_rate if hasattr(config,
-                                                                  'music_relative_rate') else external_wav_rate
-        train_music_data, train_dance_data, _ = load_data_aist(
-            data_dir=data.train_dir,
-            interval=data.seq_len,
-            move=config.move if hasattr(config, 'move') else 8,
-            rotmat=config.rotmat,
-            external_wav=config.external_wav if hasattr(config, 'external_wav') else None,
-            external_wav_rate=external_wav_rate,
-            wav_padding=config.wav_padding * (
-                    config.ds_rate // config.music_relative_rate) if hasattr(config,
-                                                                             'wav_padding') else 0)
+    print("train with AIST++ dataset!")
+    external_wav_rate = config.ds_rate // config.external_wav_rate if hasattr(config,
+                                                                              'external_wav_rate') else 1
+    # external_wav_rate = config.music_relative_rate if hasattr(config,
+    #                                                           'music_relative_rate') else external_wav_rate
+    train_music_data, train_dance_data, _ = load_data_aist(
+        data_dir=data.train_dir,
+        interval=data.seq_len,
+        move=config.move if hasattr(config, 'move') else 8,
+        rotmat=config.rotmat,
+        external_wav=config.external_wav if hasattr(config, 'external_wav') else None,
+        external_wav_rate=config.external_wav_rate if hasattr(config, 'external_wav_rate') else 1,
+        wav_padding=config.wav_padding * (
+                config.ds_rate // config.music_relative_rate) if hasattr(config,
+                                                                         'wav_padding') else 0)
 
-    else:
-        train_music_data, train_dance_data = load_data(
-            data.train_dir,
-            interval=data.seq_len,
-            data_type=data.data_type)
     return prepare_dataloader(train_music_data, train_dance_data, config.batch_size)
 
 
@@ -74,8 +67,8 @@ def _build_test_loader(config):
     data = config.data
     print("test with AIST++ dataset!")
     music_data, dance_data, dance_names = load_test_data_aist(
-        data.test_dir,
-        move=config.move,
+        data_dir=data.test_dir,
+        move=config.move if hasattr(config, 'move') else 8,
         rotmat=config.rotmat,
         external_wav=config.external_wav if hasattr(config, 'external_wav') else None,
         external_wav_rate=config.external_wav_rate if hasattr(config, 'external_wav_rate') else 1,
