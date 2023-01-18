@@ -127,7 +127,7 @@ vqvae_weight: 'experiments/sep_vqvae_root/ckpt/epoch_500.pt'
 expname: actor_critic_testdata
 init_weight: 'experiments/motion_gpt_new/ckpt/epoch_80.pt'
 epoch: 10
-batch_size: 32
+batch_size: 128
 save_per_epochs: 5
 test_freq: 5
 log_per_updates: 1

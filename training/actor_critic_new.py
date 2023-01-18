@@ -44,6 +44,11 @@ class Actor_Critic:
         self.init_models, self.training_data, self.test_loader, self.dance_names, self.optimizer, self.schedular \
             = build_util.build(config=self.config)
 
+        model_reward = getattr(models, args.reward.name)
+        reward = model_reward(args.reward)
+        dance_reward = nn.DataParallel(reward)
+        self.dance_reward = dance_reward.cuda()
+
     def train(self):
         vqvae = self.init_models[0].eval()
         gpt = self.init_models[1].train()
@@ -153,8 +158,11 @@ class Actor_Critic:
                 # pose_sample [1...28] len 28
 
                 # 3a. compute rewards from motion (1..28, len 28) and music (1*8..28*8, len 28*8)
+                # print("Music beats: ", beat_seq[:, 8:-8].shape)
+                # print("Motion sample: ", pose_sample.shape)
                 rewards = self.dance_reward(pose_sample, beat_seq[:, 8:-8], config.ds_rate)
                 # reward of action 0 ... 27 (dance 1...28, with music 1...28), len 28
+                # print("Reward: ", rewards.shape)
 
                 gpt.train()
                 gpt.module.freeze_drop()
@@ -164,8 +172,9 @@ class Actor_Critic:
                 # 3c. if training critic net, then only compute TDerror, with grad
 
                 values = gpt.module.critic(quants_input, music_seq)[:, :, 0]  # value of state [0 ... 28]
-                td_error = (rewards + config.gamma * values[:, 1:]).clone().detach() - values[:,
-                                                                                       :-1]  # values[1..28] - values[0..27], len 28
+
+                # values[1..28] - values[0..27], len 28
+                td_error = (rewards + config.gamma * values[:, 1:]).clone().detach() - values[:, :-1]
 
                 with torch.no_grad():
                     gpt.eval()
@@ -187,6 +196,7 @@ class Actor_Critic:
                 # if training actor net:
                 if epoch_i >= config.pretrain_critic_epoch and (
                         batch_i % (config.critic_iter + config.actor_iter) < config.actor_iter):
+                    # print("training actor net")
                     output, actor_loss, entropy = gpt.module.actor(quants_actor_input, music_seq[:, :-1],
                                                                    quants_actor_output,
                                                                    reduction=False)  # output dance 1...28
@@ -199,6 +209,7 @@ class Actor_Critic:
                         mask_seq).clone().detach()
                 # if training critic net:
                 else:
+                    # print("training critic net")
                     loss = torch.mean(td_error ** 2)
 
                 actor_loss = actor_loss.clone().detach().mean()
@@ -422,7 +433,8 @@ class Actor_Critic:
                         pose_sample[:, iii, :3] = pose_sample[:, iii - 1, :3] + global_vel[:, iii - 1, :]
                 results.append(pose_sample)
         visualizeAndWrite(results, config, self.sampledir, names, epoch_tested, quants)
-#
+
+
 #     def _build(self):
 #         config = self.config
 #         self.start_epoch = 0
@@ -584,19 +596,18 @@ class Actor_Critic:
 #         #     os.mkdir(self.ckptdir)
 #
 #
-# def prepare_dataloader(music_data, dance_data, beat_data, batch_size, interval):
-#     modaac = MoDaSeqAC(music_data, dance_data, beat_data, interval)
-#     sampler = torch.utils.data.RandomSampler(modaac, replacement=True)
-#
-#     data_loader = torch.utils.data.DataLoader(
-#         modaac,
-#         num_workers=8,
-#         batch_size=batch_size,
-#         # shuffle=True,
-#         sampler=sampler,
-#         pin_memory=True
-#         # collate_fn=paired_collate_fn,
-#     )
-#
-#     return data_loader
+def prepare_dataloader(music_data, dance_data, beat_data, batch_size, interval):
+    modaac = MoDaSeqAC(music_data, dance_data, beat_data, interval)
+    sampler = torch.utils.data.RandomSampler(modaac, replacement=True)
 
+    data_loader = torch.utils.data.DataLoader(
+        modaac,
+        num_workers=8,
+        batch_size=batch_size,
+        # shuffle=True,
+        sampler=sampler,
+        pin_memory=True
+        # collate_fn=paired_collate_fn,
+    )
+
+    return data_loader
