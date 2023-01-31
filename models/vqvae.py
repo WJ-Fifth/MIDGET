@@ -140,6 +140,7 @@ class VQVAE(nn.Module):
         assert len(zs) == end_level - start_level
         xs_quantised = self.bottleneck.decode(zs, start_level=start_level, end_level=end_level)
         assert len(xs_quantised) == end_level - start_level
+        # print(xs_quantised[0].shape)
 
         # Use only lowest level
         decoder, x_quantised = self.decoders[start_level], xs_quantised[0:1]
@@ -148,10 +149,18 @@ class VQVAE(nn.Module):
         return x_out
 
     def decode(self, zs, start_level=0, end_level=None, bs_chunks=1):
-        z_chunks = [torch.chunk(z, bs_chunks, dim=0) for z in zs]
+        if isinstance(zs, list):
+            z_chunks = zs
+        else:
+            z_chunks = torch.chunk(zs, bs_chunks, dim=0)
+
+        # z_chunks = [torch.chunk(z, bs_chunks, dim=0) for z in zs]
+
         x_outs = []
         for i in range(bs_chunks):
-            zs_i = [z_chunk[i] for z_chunk in z_chunks]
+            zs_i = z_chunks[i]
+            # zs_i = [z_chunk[i] for z_chunk in z_chunks]
+
             x_out = self._decode(zs_i, start_level=start_level, end_level=end_level)
             x_outs.append(x_out)
         return torch.cat(x_outs, dim=0)
@@ -166,18 +175,18 @@ class VQVAE(nn.Module):
             encoder = self.encoders[level]
             x_out = encoder(x_in)
             xs.append(x_out[-1])
-        zs = self.bottleneck.encode(xs)
-
-        return zs[start_level:end_level]
+        zs, codebook = self.bottleneck.encode(xs)
+        return zs[start_level:end_level], codebook
 
     def encode(self, x, start_level=0, end_level=None, bs_chunks=1):
+        codebook = None
         x_chunks = torch.chunk(x, bs_chunks, dim=0)
         zs_list = []
         for x_i in x_chunks:
-            zs_i = self._encode(x_i, start_level=start_level, end_level=end_level)
+            zs_i, codebook = self._encode(x_i, start_level=start_level, end_level=end_level)
             zs_list.append(zs_i)
         zs = [torch.cat(zs_level_list, dim=0) for zs_level_list in zip(*zs_list)]
-        return zs
+        return zs, codebook
 
     def sample(self, n_samples):
         zs = [torch.randint(0, self.l_bins, size=(n_samples, *z_shape), device='cuda') for z_shape in self.z_shapes]
@@ -204,27 +213,12 @@ class VQVAE(nn.Module):
             assert_shape(x_out, x_in.shape)
             x_outs.append(x_out)
 
-        # Loss
-        # def _spectral_loss(x_target, x_out, self.hps):
-        #     if hps.use_nonrelative_specloss:
-        #         sl = spectral_loss(x_target, x_out, self.hps) / hps.bandwidth['spec']
-        #     else:
-        #         sl = spectral_convergence(x_target, x_out, self.hps)
-        #     sl = t.mean(sl)
-        #     return sl
-        #
-        # def _multispectral_loss(x_target, x_out, self.hps):
-        #     sl = multispectral_loss(x_target, x_out, self.hps) / hps.bandwidth['spec']
-        #     sl = t.mean(sl)
-        #     return sl
 
         recons_loss = torch.zeros(()).to(x.device)
         regularization = torch.zeros(()).to(x.device)
         velocity_loss = torch.zeros(()).to(x.device)
         acceleration_loss = torch.zeros(()).to(x.device)
-        # spec_loss = t.zeros(()).to(x.device)
-        # multispec_loss = t.zeros(()).to(x.device)
-        # x_target = audio_postprocess(x.float(), self.hps)
+
         x_target = x.float()
 
         for level in reversed(range(self.levels)):

@@ -522,7 +522,7 @@ def load_data_aist(data_dir, interval=240, move=8, rotmat=False, external_wav=No
     tot = 0
     music_data, dance_data = [], []
     fnames = sorted(os.listdir(data_dir))
-    # fnames = fnames[:10]  # For debug
+    fnames = fnames[:10]  # For debug
 
     music_name = []
     if ".ipynb_checkpoints" in fnames:
@@ -597,7 +597,7 @@ def load_test_data(data_dir, data_type='2D'):
     tot = 0
     music_data, dance_data = [], []
     fnames = sorted(os.listdir(data_dir))
-    # fnames = fnames[:10]  # For debug
+    fnames = fnames[:10]  # For debug
 
     for fname in fnames:
         path = os.path.join(data_dir, fname)

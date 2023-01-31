@@ -76,6 +76,8 @@ def calc_ba_score(root):
     print("lowest")
     print(lowest_motion)
 
+    print(len(ba_scores))
+
     return np.mean(ba_scores)
 
 
@@ -85,7 +87,7 @@ if __name__ == '__main__':
     # pred_root = './experiments/motion_gpt_new/vis/pkl/ep000080'
 
     # pred_root = './experiments/cc_motion_gpt/eval/pkl/ep000400'
-    pred_root = 'experiments/actor_critic_new/eval/pkl/ep000001'
+    pred_root = 'experiments/actor_critic_testdata/vis/pkl/ep000010'
 
     score = calc_ba_score(pred_root)
 

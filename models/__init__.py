@@ -15,9 +15,11 @@ from .cross_cond_gpt2 import CrossCondGPT2
 from .gpt_model_new import GPT_Model
 from .cross_cond_gpt2_ac import CrossCondGPT2AC
 from .gpt_model_ac import Actor_GPT_Model
+from .gpt_model_ba import GPT_BA_Model
 
 # from .cross_cond_gpt3 import CrossCondGPT3 from .cross_cond_gpt2_music_window import CrossCondGPT2MW __all__ = [
 # 'VQVAE', 'condGPT', 'condGPT2', 'condGPT3', 'CrossCondGPT4', 'SepVQVAE', 'SepCondGPT', 'SepCondGPT2',
 # 'CrossCondGPT', 'UpDownReward', 'CriticTransformer', 'CrossCondGPT2', 'CrossCondGPT3', 'CrossCondGPT2AC',
 # 'CrossCondGPT2MW']
-__all__ = ['SepVQVAE', 'SepVQVAER', 'UpDownReward', 'CrossCondGPT2', 'CrossCondGPT2AC', 'GPT_Model', 'Actor_GPT_Model']
+__all__ = ['SepVQVAE', 'SepVQVAER', 'UpDownReward', 'CrossCondGPT2', 'CrossCondGPT2AC', 'GPT_Model', 'Actor_GPT_Model',
+           'GPT_BA_Model']

@@ -10,10 +10,12 @@ import warnings
 from tqdm import tqdm
 import utils.build_util as build_util
 
+from scipy.ndimage import gaussian_filter
+import numpy as np
+
 warnings.filterwarnings('ignore')
 
-
-class GPT_BASE:
+class GPT_BA:
     def __init__(self, args):
         self.device = None
         self.config = args
@@ -21,6 +23,20 @@ class GPT_BASE:
         self.ckptdir, self.evaldir, self.gtdir, self.visdir, self.expdir = dir_setting(self.config)
         self.init_models, self.training_data, self.test_loader, self.dance_names, self.optimizer, self.schedular \
             = build_util.build(config=self.config)
+
+    def BA_Loss(self, pred_motions, music_beats):
+        top_motion = pred_motions[:, :-1, :]
+        next_motion = pred_motions[:, 1:, :]
+
+        l2_distance = torch.mean(torch.square(top_motion - next_motion), dim=-1)
+        motion_beats_prob = torch.exp(-l2_distance / 0.05 ** 2)
+
+        extra = torch.zeros(top_motion.shape[0])
+        extra = extra.unsqueeze(1).to(self.device)
+        motion_beats_prob = torch.cat((extra, motion_beats_prob), dim=1)
+
+        ba_loss = torch.mean(torch.square(music_beats - motion_beats_prob))
+        return ba_loss
 
     def train(self):
         vqvae = self.init_models[0].eval()
@@ -39,7 +55,6 @@ class GPT_BASE:
 
         if hasattr(config, 'init_weight') and config.init_weight is not None and config.init_weight != '':
             print('Use pretrained model!')
-            # print(config.init_weight)
             checkpoint = torch.load(config.init_weight)
             gpt.load_state_dict(checkpoint['model'], strict=False)
 
@@ -54,10 +69,15 @@ class GPT_BASE:
             log.set_progress(epoch_i, len(training_data))
 
             for batch_i, batch in enumerate(training_data):
+
                 music_seq, pose_seq = batch
+                N, T, _ = pose_seq.shape
+                music_beats = music_seq[:, :, 53]
 
                 music_seq = music_seq.to(self.device)
                 pose_seq = pose_seq.to(self.device)
+                music_beats = music_beats.to(self.device)
+
                 pose_seq[:, :, :3] = 0
                 optimizer.zero_grad()
 
@@ -73,7 +93,18 @@ class GPT_BASE:
                         quants_input = quants[:, :-1].clone().detach()
                         quants_target = quants[:, 1:].clone().detach()
 
-                output, loss = gpt(quants_input, music_seq, quants_target)
+                # print("up joint codebook", up_codebook.shape)
+                # print("down joint codebook", down_codebook.shape)
+
+                output, joints_index, ce_loss = gpt(quants_input, music_seq, quants_target, (up_codebook, down_codebook))
+                up_idx, down_idx = joints_index
+                up_idx, down_idx = up_idx.permute(0, 2, 1).float(), down_idx.permute(0, 2, 1).float()
+
+                pose_sample = vqvae.module.decode((up_idx, down_idx), bs_chunks=N)
+
+                ba_loss = self.BA_Loss(pose_sample, music_beats[:, 8:])
+
+                loss = ce_loss + 3 * ba_loss
 
                 loss.backward()
 
@@ -105,7 +136,7 @@ class GPT_BASE:
                         music_seq = music_seq.to(self.device)
                         pose_seq = pose_seq.to(self.device)
 
-                        quants, _, _ = vqvae.module.encode(pose_seq)
+                        quants, up_codebook, down_codebook = vqvae.module.encode(pose_seq)
 
                         if isinstance(quants, tuple):
                             x = tuple(quants[i][0][:, :1] for i in range(len(quants)))
@@ -113,7 +144,7 @@ class GPT_BASE:
                             x = quants[0][:, :1]
 
                         zs = gpt.module.sample(x, cond=music_seq,
-                                               shift=config.sample_shift if hasattr(config, 'sample_shift') else None)
+                                               shift=config.sample_shift if hasattr(config, 'sample_shift') else None, codebooks=(up_codebook, down_codebook))
                         pose_sample = vqvae.module.decode(zs)
 
                         # Calculate the position of the predicted pose relative to the global vector
@@ -167,7 +198,7 @@ class GPT_BASE:
                 music_seq = music_seq.to(self.device)
                 pose_seq = pose_seq.to(self.device)
 
-                quants, _, _ = vqvae.module.encode(pose_seq)
+                quants, up_codebook, down_codebook = vqvae.module.encode(pose_seq)
 
                 if isinstance(quants, tuple):
                     x = tuple(quants[i][0][:, :1].clone() for i in range(len(quants)))
@@ -181,8 +212,11 @@ class GPT_BASE:
                     else:
                         x[:, 0] = torch.randint(512, (1,))
 
-                zs = gpt.module.sample(x, cond=music_seq,
-                                       shift=config.sample_shift if hasattr(config, 'sample_shift') else None)
+                zs = gpt.module.sample(xs=x,
+                                       cond=music_seq,
+                                       shift=config.sample_shift if hasattr(config, 'sample_shift') else None,
+                                       codebooks=(up_codebook, down_codebook))
+
                 pose_sample = vqvae.module.decode(zs)
 
                 if config.global_vel:
@@ -197,5 +231,4 @@ class GPT_BASE:
                         zs[ii][0].cpu().data.numpy()[0] for ii in range(len(zs)))
                 else:
                     quants_out[self.dance_names[i_eval]] = zs[0].cpu().data.numpy()[0]
-
             visualizeAndWrite(results, config, self.evaldir, self.dance_names, epoch_tested, quants_out)

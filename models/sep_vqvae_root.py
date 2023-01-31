@@ -67,8 +67,8 @@ class SepVQVAER(nn.Module):
         else:
             zup = zs
             zdown = zs
-        xup = self.vqvae_up.decode(zup)
-        xdown = self.vqvae_down.decode(zdown)
+        xup = self.vqvae_up.decode(zup, end_level=end_level, bs_chunks=bs_chunks)
+        xdown = self.vqvae_down.decode(zdown, end_level=end_level, bs_chunks=bs_chunks)
         b, t, cup = xup.size()
         _, _, cdown = xdown.size()
         x = torch.zeros(b, t, (cup + cdown) // self.chanel_num, self.chanel_num).cuda()
@@ -79,13 +79,16 @@ class SepVQVAER(nn.Module):
 
     def encode(self, x, start_level=0, end_level=None, bs_chunks=1):
         b, t, c = x.size()
-        zup = self.vqvae_up.encode(x.view(b, t, c // self.chanel_num, self.chanel_num)[:, :, smpl_up].view(b, t, -1),
+        zup, up_codebook = self.vqvae_up.encode(x.view(b, t, c // self.chanel_num, self.chanel_num)[:, :, smpl_up].view(b, t, -1),
                                    start_level, end_level, bs_chunks)
 
-        zdown = self.vqvae_down.encode(
+        zdown, down_codebook = self.vqvae_down.encode(
             x.view(b, t, c // self.chanel_num, self.chanel_num)[:, :, smpl_down].view(b, t, -1), start_level, end_level,
             bs_chunks)
-        return (zup, zdown)
+        return (zup, zdown), up_codebook, down_codebook
+
+    def get_codebooks(self):
+        up_codebook = self.vqvae_up
 
     def sample(self, n_samples):
         """

@@ -16,7 +16,21 @@ from torch.nn import functional as F
 from .resnet import Resnet1D
 
 
-class GPT_Model(nn.Module):
+def top_select(logits_up, logits_down, up_codebook, down_codebook):
+    probs_up = F.softmax(logits_up, dim=-1)
+    probs_down = F.softmax(logits_down, dim=-1)
+    # print("probs up", probs_up.shape)
+
+    _, idx_up = torch.topk(probs_up, k=1, dim=-1)
+    _, idx_down = torch.topk(probs_down, k=1, dim=-1)
+
+    probs_up_codes = torch.matmul(probs_up, up_codebook.t())
+    probs_down_codes = torch.matmul(probs_up, down_codebook.t())
+    # print("up top select", ix_up.shape)
+    return (probs_up_codes, probs_down_codes), (idx_up, idx_down)
+
+
+class GPT_BA_Model(nn.Module):
     """  the full GPT language model, with a context size of block_size """
 
     def __init__(self, config):
@@ -29,7 +43,7 @@ class GPT_Model(nn.Module):
     def get_block_size(self):
         return self.block_size
 
-    def sample(self, xs, cond, shift=None):
+    def sample(self, xs, cond, shift=None, codebooks=None):
         block_size = self.get_block_size() - 1
         if shift is not None:
             block_shift = min(shift, block_size)
@@ -45,33 +59,36 @@ class GPT_Model(nn.Module):
             cond_input = cond[:, :(k + 1) * 8] if k < block_size else cond[:, (k - (
                     block_shift + (k - block_size - 1) % (block_size - block_shift + 1)) + 1) * 8: (k + 1) * 8]
 
-            logits, _ = self.forward((x_cond_up, x_cond_down), cond_input)
+            _, logits, _ = self.forward((x_cond_up, x_cond_down), cond_input, targets=None, codebooks=codebooks)
             # jj += 1
             # pluck the logits at the final step and scale by temperature
             logit_up, logit_down = logits
-            logit_up = logit_up[:, -1, :]
-            logit_down = logit_down[:, -1, :]
+            ix_up = logit_up[:, -1, :]
+            ix_down = logit_down[:, -1, :]
             # print("logit up", logit_up.shape)
             # print("logit down", logit_down.shape)
-
-            probs_up = F.softmax(logit_up, dim=-1)
-            probs_down = F.softmax(logit_down, dim=-1)
-
-            _, ix_up = torch.topk(probs_up, k=1, dim=-1)
-            _, ix_down = torch.topk(probs_down, k=1, dim=-1)
+            #
+            # probs_up = F.softmax(logit_up, dim=-1)
+            # probs_down = F.softmax(logit_down, dim=-1)
+            #
+            # _, ix_up = torch.topk(probs_up, k=1, dim=-1)
+            # _, ix_down = torch.topk(probs_down, k=1, dim=-1)
 
             # append to the sequence and continue
             x_up = torch.cat((x_up, ix_up), dim=1)
             x_down = torch.cat((x_down, ix_down), dim=1)
 
-        # print("x_up", x_up.shape)
-        # print("x_down", x_down.shape)
-        return [x_up], [x_down]
+        return x_up.view(1, 1, -1), x_down.view(1, 1, -1)
 
-    def forward(self, idxs, cond, targets=None):
-        idx_up, idx_down = idxs
+    def forward(self, xs, cond, targets=None, codebooks=None):
+        (x_up, x_down) = xs
 
-        targets_up, targets_down = None, None
+        if codebooks is not None:
+            (up_codebook, down_codebook) = codebooks
+        else:
+            (up_codebook, down_codebook) = None, None
+
+        (targets_up, targets_down) = None, None
         if targets is not None:
             targets_up, targets_down = targets
 
@@ -81,16 +98,19 @@ class GPT_Model(nn.Module):
         else:
             input_music_feature = music_feature
 
-        feat = self.gpt_base(idx_up, idx_down, input_music_feature)
+        feat = self.gpt_base(x_up, x_down, input_music_feature)
 
         logits_up, logits_down, loss_up, loss_down = self.gpt_head(feat, targets)
+
+        (probs_up_codes, probs_down_codes), (idx_up, idx_down) = \
+            top_select(logits_up, logits_down, up_codebook, down_codebook)
 
         if loss_up is not None and loss_down is not None:
             loss = loss_up + loss_down
         else:
             loss = None
 
-        return (logits_up, logits_down), loss
+        return (probs_up_codes, probs_down_codes), (idx_up, idx_down), loss
 
 
 class MusicDownSample(nn.Module):

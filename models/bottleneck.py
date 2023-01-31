@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import models.utils.dist_adapter as dist
 
+
 class BottleneckBlock(nn.Module):
     def __init__(self, k_bins, emb_width, mu):
         super().__init__()
@@ -85,6 +86,10 @@ class BottleneckBlock(nn.Module):
                     usage=usage,
                     dk=dk)
 
+    def return_k(self):
+        # [N, C]
+        return self.k
+
     def preprocess(self, x):
         # NCT -> NTC -> [NT, C]
         x = x.permute(0, 2, 1).contiguous()
@@ -93,8 +98,9 @@ class BottleneckBlock(nn.Module):
         if x.shape[-1] == self.emb_width:
             prenorm = torch.norm(x - torch.mean(x)) / np.sqrt(np.prod(x.shape))
         elif x.shape[-1] == 2 * self.emb_width:
-            x1, x2 = x[...,:self.emb_width], x[...,self.emb_width:]
-            prenorm = (torch.norm(x1 - torch.mean(x1)) / np.sqrt(np.prod(x1.shape))) + (torch.norm(x2 - torch.mean(x2)) / np.sqrt(np.prod(x2.shape)))
+            x1, x2 = x[..., :self.emb_width], x[..., self.emb_width:]
+            prenorm = (torch.norm(x1 - torch.mean(x1)) / np.sqrt(np.prod(x1.shape))) + (
+                        torch.norm(x2 - torch.mean(x2)) / np.sqrt(np.prod(x2.shape)))
 
             # Normalise
             x = x1 + x2
@@ -113,13 +119,13 @@ class BottleneckBlock(nn.Module):
         # Calculate latent code x_l
         k_w = self.k.t()
         distance = torch.sum(x ** 2, dim=-1, keepdim=True) - 2 * torch.matmul(x, k_w) + torch.sum(k_w ** 2, dim=0,
-                                                                                            keepdim=True)  # (N * L, b)
+                                                                                                  keepdim=True)  # (N * L, b)
         min_distance, x_l = torch.min(distance, dim=-1)
         fit = torch.mean(min_distance)
         return x_l, fit
 
     def dequantise(self, x_l):
-        x = F.embedding(x_l, self.k)
+        x = F.embedding(x_l.long(), self.k)
         return x
 
     def encode(self, x):
@@ -133,7 +139,8 @@ class BottleneckBlock(nn.Module):
 
         # Postprocess.
         x_l = x_l.view(N, T)
-        return x_l
+
+        return x_l, self.k
 
     def decode(self, x_l):
         N, T = x_l.shape
@@ -173,7 +180,7 @@ class BottleneckBlock(nn.Module):
         x_d = x + (x_d - x).detach()
 
         # Postprocess
-        x_l, x_d = self.postprocess(x_l, x_d, (N,T))
+        x_l, x_d = self.postprocess(x_l, x_d, (N, T))
         return x_l, x_d, commit_loss, dict(fit=fit,
                                            pn=prenorm,
                                            **update_metrics)
@@ -183,15 +190,16 @@ class Bottleneck(nn.Module):
     def __init__(self, l_bins, emb_width, mu, levels):
         super().__init__()
         self.levels = levels
-
         level_block = lambda level: BottleneckBlock(l_bins, emb_width, mu)
         self.level_blocks = nn.ModuleList()
         for level in range(self.levels):
             self.level_blocks.append(level_block(level))
 
     def encode(self, xs):
-        zs = [level_block.encode(x) for (level_block, x) in zip(self.level_blocks, xs)]
-        return zs
+        tmp = [level_block.encode(x) for (level_block, x) in zip(self.level_blocks, xs)]
+
+        zs, codebook = tmp[0]
+        return [zs], codebook
 
     def decode(self, zs, start_level=0, end_level=None):
         if end_level is None:
@@ -216,9 +224,11 @@ class Bottleneck(nn.Module):
                 metrics.append(metric)
         return zs, xs_quantised, commit_losses, metrics
 
+
 class NoBottleneckBlock(nn.Module):
     def restore_k(self):
         pass
+
 
 class NoBottleneck(nn.Module):
     def __init__(self, levels):
@@ -241,6 +251,7 @@ class NoBottleneck(nn.Module):
         commit_losses = [zero for _ in range(self.levels)]
         metrics = [dict(entropy=zero, usage=zero, used_curr=zero, pn=zero, dk=zero) for _ in range(self.levels)]
         return xs, xs, commit_losses, metrics
+
 
 if __name__ == '__main__':
     # from jukebox.utils.dist_utils import setup_dist_from_mpi

@@ -121,31 +121,3 @@ class SepVQVAE(nn.Module):
 
         return xout.view(b, t, -1), (loss_up + loss_down) * 0.5, [metrics_up, metrics_down]
 
-
-if __name__ == "__main__":
-    from torchsummary import summary
-    import argparse
-    import yaml
-    from easydict import EasyDict
-    from pprint import pprint
-
-    def parse_args():
-        parser = argparse.ArgumentParser(
-            description='Pytorch implementation of Music2Dance')
-        parser.add_argument('--config', default='')
-        return parser.parse_args()
-
-    args = parse_args()
-
-    with open(args.config) as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
-
-    for k, v in vars(args).items():
-        config[k] = v
-
-    config = EasyDict(config)
-    pprint(config)
-
-    input_size = (1, 240, 72)
-
-    model = SepVQVAE(config.structure)

@@ -118,9 +118,9 @@ class VQVAER(nn.Module):
         # Decode
         if end_level is None:
             end_level = self.levels
-        assert len(zs) == end_level - start_level
+        # assert len(zs) == end_level - start_level
         xs_quantised = self.bottleneck.decode(zs, start_level=start_level, end_level=end_level)
-        assert len(xs_quantised) == end_level - start_level
+        # assert len(xs_quantised) == end_level - start_level
 
         # Use only lowest level
         decoder, decoder_root, x_quantised = self.decoders[start_level], self.decoders_root[start_level], xs_quantised[
@@ -136,10 +136,14 @@ class VQVAER(nn.Module):
         return x_out
 
     def decode(self, zs, start_level=0, end_level=None, bs_chunks=1):
-        z_chunks = [torch.chunk(z, bs_chunks, dim=0) for z in zs]
+        z_chunks = torch.chunk(zs, bs_chunks, dim=0)
+        # z_chunks = [torch.chunk(z, bs_chunks, dim=0) for z in zs]
+
         x_outs = []
         for i in range(bs_chunks):
-            zs_i = [z_chunk[i] for z_chunk in z_chunks]
+            zs_i = z_chunks[i]
+            # zs_i = [z_chunk[i] for z_chunk in z_chunks]
+
             x_out = self._decode(zs_i, start_level=start_level, end_level=end_level)
             x_outs.append(x_out)
         return torch.cat(x_outs, dim=0)
@@ -155,18 +159,18 @@ class VQVAER(nn.Module):
             encoder = self.encoders[level]
             x_out = encoder(x_in)
             xs.append(x_out[-1])
-        zs = self.bottleneck.encode(xs)
-        return zs[start_level:end_level]
+        zs, codebook = self.bottleneck.encode(xs)
+        return zs[start_level:end_level], codebook
 
     def encode(self, x, start_level=0, end_level=None, bs_chunks=1):
         x[:, :, :self.hps.joint_channel] = 0
         x_chunks = torch.chunk(x, bs_chunks, dim=0)
         zs_list = []
         for x_i in x_chunks:
-            zs_i = self._encode(x_i, start_level=start_level, end_level=end_level)
+            zs_i, codebook = self._encode(x_i, start_level=start_level, end_level=end_level)
             zs_list.append(zs_i)
         zs = [torch.cat(zs_level_list, dim=0) for zs_level_list in zip(*zs_list)]
-        return zs
+        return zs, codebook
 
     def sample(self, n_samples):
         zs = [torch.randint(0, self.l_bins, size=(n_samples, *z_shape), device='cuda') for z_shape in self.z_shapes]

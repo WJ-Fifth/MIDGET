@@ -183,7 +183,9 @@ if __name__ == '__main__':
     # pred_root = 'experiments/actor_critic/eval/pkl/ep000010'
     # pred_root = 'experiments/cc_motion_gpt/eval/pkl/ep000400'
     # pred_root = 'experiments/motion_gpt_new/vis/pkl/ep000080'
-    pred_root = 'experiments/actor_critic_new/eval/pkl/ep000001'
+    # pred_root = 'experiments/actor_critic_new/eval/pkl/ep000001'
+
+    pred_root = 'experiments/actor_critic_testdata/vis/pkl/ep000010'
 
     print('Calculating and saving features')
     calc_and_save_feats(gt_root)
