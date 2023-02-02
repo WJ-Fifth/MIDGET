@@ -65,10 +65,6 @@ class BottleneckBlock(nn.Module):
             y = self._tile(x)
             _k_rand = y[torch.randperm(y.shape[0])][:k_bins]
 
-            # dist.broadcast(_k_rand, 0)
-            # dist.all_reduce(_k_sum)
-            # dist.all_reduce(_k_elem)
-
             # Update centres
             old_k = self.k
             self.k_sum = mu * self.k_sum + (1. - mu) * _k_sum  # w, k_bins
@@ -151,6 +147,7 @@ class BottleneckBlock(nn.Module):
 
         # Postprocess
         x_d = x_d.view(N, T, width).permute(0, 2, 1).contiguous()
+
         return x_d
 
     def forward(self, x, update_k=True):
@@ -252,9 +249,3 @@ class NoBottleneck(nn.Module):
         metrics = [dict(entropy=zero, usage=zero, used_curr=zero, pn=zero, dk=zero) for _ in range(self.levels)]
         return xs, xs, commit_losses, metrics
 
-
-if __name__ == '__main__':
-    # from jukebox.utils.dist_utils import setup_dist_from_mpi
-    # rank, local_rank, device = setup_dist_from_mpi(port=29600)
-    bottleneck = Bottleneck(256, 64, 0.99, 2)
-    bottleneck.check()

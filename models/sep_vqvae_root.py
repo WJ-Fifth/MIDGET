@@ -13,42 +13,6 @@ from .vqvae_root import VQVAER
 smpl_down = [0, 1, 2, 4, 5, 7, 8, 10, 11]
 smpl_up = [3, 6, 9, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
 
-
-# def dont_update(params):
-#     for param in params:
-#         param.requires_grad = False
-
-# def update(params):
-#     for param in params:
-#         param.requires_grad = True
-
-# def calculate_strides(strides, downs):
-#     return [stride ** down for stride, down in zip(strides, downs)]
-
-# # def _loss_fn(loss_fn, x_target, x_pred, hps):
-#     if loss_fn == 'l1':
-#         return torch.mean(torch.abs(x_pred - x_target)) / hps.bandwidth['l1']
-#     elif loss_fn == 'l2':
-#         return torch.mean((x_pred - x_target) ** 2) / hps.bandwidth['l2']
-#     elif loss_fn == 'linf':
-#         residual = ((x_pred - x_target) ** 2).reshape(x_targetorch.shape[0], -1)
-#         values, _ = torch.topk(residual, hps.linf_k, dim=1)
-#         return torch.mean(values) / hps.bandwidth['l2']
-#     elif loss_fn == 'lmix':
-#         loss = 0.0
-#         if hps.lmix_l1:
-#             loss += hps.lmix_l1 * _loss_fn('l1', x_target, x_pred, hps)
-#         if hps.lmix_l2:
-#             loss += hps.lmix_l2 * _loss_fn('l2', x_target, x_pred, hps)
-#         if hps.lmix_linf:
-#             loss += hps.lmix_linf * _loss_fn('linf', x_target, x_pred, hps)
-#         return loss
-#     else:
-#         assert False, f"Unknown loss_fn {loss_fn}"
-# def _loss_fn(x_target, x_pred):
-#     return torch.mean(torch.abs(x_pred - x_target)) 
-
-
 class SepVQVAER(nn.Module):
     def __init__(self, hps):
         super().__init__()
@@ -67,15 +31,16 @@ class SepVQVAER(nn.Module):
         else:
             zup = zs
             zdown = zs
-        xup = self.vqvae_up.decode(zup, end_level=end_level, bs_chunks=bs_chunks)
-        xdown = self.vqvae_down.decode(zdown, end_level=end_level, bs_chunks=bs_chunks)
+        xup, up_quantised = self.vqvae_up.decode(zup, end_level=end_level, bs_chunks=bs_chunks)
+        xdown, down_quantised = self.vqvae_down.decode(zdown, end_level=end_level, bs_chunks=bs_chunks)
         b, t, cup = xup.size()
         _, _, cdown = xdown.size()
         x = torch.zeros(b, t, (cup + cdown) // self.chanel_num, self.chanel_num).cuda()
+
         x[:, :, smpl_up] = xup.view(b, t, cup // self.chanel_num, self.chanel_num)
         x[:, :, smpl_down] = xdown.view(b, t, cdown // self.chanel_num, self.chanel_num)
 
-        return x.view(b, t, -1)
+        return x.view(b, t, -1), [up_quantised, down_quantised]
 
     def encode(self, x, start_level=0, end_level=None, bs_chunks=1):
         b, t, c = x.size()
@@ -86,9 +51,6 @@ class SepVQVAER(nn.Module):
             x.view(b, t, c // self.chanel_num, self.chanel_num)[:, :, smpl_down].view(b, t, -1), start_level, end_level,
             bs_chunks)
         return (zup, zdown), up_codebook, down_codebook
-
-    def get_codebooks(self):
-        up_codebook = self.vqvae_up
 
     def sample(self, n_samples):
         """

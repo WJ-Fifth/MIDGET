@@ -16,19 +16,6 @@ from torch.nn import functional as F
 from .resnet import Resnet1D
 
 
-def top_select(logits_up, logits_down, up_codebook, down_codebook):
-    probs_up = F.softmax(logits_up, dim=-1)
-    probs_down = F.softmax(logits_down, dim=-1)
-    # print("probs up", probs_up.shape)
-
-    _, idx_up = torch.topk(probs_up, k=1, dim=-1)
-    _, idx_down = torch.topk(probs_down, k=1, dim=-1)
-
-    probs_up_codes = torch.matmul(probs_up, up_codebook.t())
-    probs_down_codes = torch.matmul(probs_up, down_codebook.t())
-    # print("up top select", ix_up.shape)
-    return (probs_up_codes, probs_down_codes), (idx_up, idx_down)
-
 
 class GPT_BA_Model(nn.Module):
     """  the full GPT language model, with a context size of block_size """
@@ -42,6 +29,26 @@ class GPT_BA_Model(nn.Module):
 
     def get_block_size(self):
         return self.block_size
+
+    def postprocess(self, x_l, x_d):
+        # [NT, C] -> NTC -> NCT
+        N, T, _ = x_l.shape
+        x_d = x_d.view(N, T, -1).permute(0, 2, 1).contiguous()
+        x_l = x_l.view(N, T)
+        return x_l, x_d
+
+    def top_select(self, logits_up, logits_down, up_codebook, down_codebook):
+        probs_up = F.softmax(logits_up, dim=-1)
+        probs_down = F.softmax(logits_down, dim=-1)
+        # print("probs up", probs_up.shape)
+
+        _, idx_up = torch.topk(probs_up, k=1, dim=-1)
+        _, idx_down = torch.topk(probs_down, k=1, dim=-1)
+
+        probs_up_codes = torch.matmul(probs_up, up_codebook.t())
+        probs_down_codes = torch.matmul(probs_up, down_codebook.t())
+        # print("up top select", ix_up.shape)
+        return (probs_up_codes, probs_down_codes), (idx_up, idx_down)
 
     def sample(self, xs, cond, shift=None, codebooks=None):
         block_size = self.get_block_size() - 1
@@ -65,14 +72,6 @@ class GPT_BA_Model(nn.Module):
             logit_up, logit_down = logits
             ix_up = logit_up[:, -1, :]
             ix_down = logit_down[:, -1, :]
-            # print("logit up", logit_up.shape)
-            # print("logit down", logit_down.shape)
-            #
-            # probs_up = F.softmax(logit_up, dim=-1)
-            # probs_down = F.softmax(logit_down, dim=-1)
-            #
-            # _, ix_up = torch.topk(probs_up, k=1, dim=-1)
-            # _, ix_down = torch.topk(probs_down, k=1, dim=-1)
 
             # append to the sequence and continue
             x_up = torch.cat((x_up, ix_up), dim=1)
@@ -103,14 +102,17 @@ class GPT_BA_Model(nn.Module):
         logits_up, logits_down, loss_up, loss_down = self.gpt_head(feat, targets)
 
         (probs_up_codes, probs_down_codes), (idx_up, idx_down) = \
-            top_select(logits_up, logits_down, up_codebook, down_codebook)
+            self.top_select(logits_up, logits_down, up_codebook, down_codebook)
+
+        # idx_up = probs_up_codes + (idx_up - probs_up_codes).detach()
+        # idx_down = probs_down_codes + (idx_down - probs_down_codes).detach()
 
         if loss_up is not None and loss_down is not None:
             loss = loss_up + loss_down
         else:
             loss = None
 
-        return (probs_up_codes, probs_down_codes), (idx_up, idx_down), loss
+        return [probs_up_codes, probs_down_codes], (idx_up, idx_down), loss
 
 
 class MusicDownSample(nn.Module):

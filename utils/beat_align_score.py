@@ -87,7 +87,7 @@ if __name__ == '__main__':
     # pred_root = './experiments/motion_gpt_new/vis/pkl/ep000080'
 
     # pred_root = './experiments/cc_motion_gpt/eval/pkl/ep000400'
-    pred_root = 'experiments/actor_critic_testdata/vis/pkl/ep000010'
+    pred_root = 'experiments/motion_gpt_beat_align/eval/pkl/ep000020'
 
     score = calc_ba_score(pred_root)
 

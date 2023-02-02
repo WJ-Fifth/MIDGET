@@ -101,11 +101,12 @@ data:
 testing:
     height: 540
     width: 960
-    ckpt_epoch: 80
+    ckpt_epoch: 20
 
 
 vqvae_weight: 'experiments/sep_vqvae_root/ckpt/epoch_500.pt'
-expname: motion_gpt_beat_align
+expname: GPT_BA_L2_1
+init_weight: 'experiments/motion_gpt_new/ckpt/epoch_80.pt'
 
 
 #need_not_train_data: True
@@ -114,7 +115,7 @@ expname: motion_gpt_beat_align
 epoch: 80
 batch_size: 32
 # demo: True
-save_per_epochs: 20
+save_per_epochs: 10
 test_freq: 40
 log_per_updates: 1
 seed: 42

@@ -10,10 +10,14 @@ import warnings
 from tqdm import tqdm
 import utils.build_util as build_util
 
+
 from scipy.ndimage import gaussian_filter
 import numpy as np
 
 warnings.filterwarnings('ignore')
+
+smpl_down = [0, 1, 2, 4, 5, 7, 8, 10, 11]
+smpl_up = [3, 6, 9, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
 
 class GPT_BA:
     def __init__(self, args):
@@ -23,6 +27,21 @@ class GPT_BA:
         self.ckptdir, self.evaldir, self.gtdir, self.visdir, self.expdir = dir_setting(self.config)
         self.init_models, self.training_data, self.test_loader, self.dance_names, self.optimizer, self.schedular \
             = build_util.build(config=self.config)
+
+    def BCE_Loss(self, pred_motions, music_beats):
+        top_motion = pred_motions[:, :-1, :]
+        next_motion = pred_motions[:, 1:, :]
+
+        l2_distance = torch.mean(torch.square(top_motion - next_motion), dim=-1)
+        motion_beats_prob = torch.exp(-l2_distance / 0.05 ** 2)
+
+        extra = torch.zeros(top_motion.shape[0])
+        extra = extra.unsqueeze(1).to(self.device)
+        motion_beats_prob = torch.cat((extra, motion_beats_prob), dim=1)
+
+        bce_loss = torch.nn.BCELoss()
+
+        return bce_loss(motion_beats_prob, music_beats.float())
 
     def BA_Loss(self, pred_motions, music_beats):
         top_motion = pred_motions[:, :-1, :]
@@ -98,20 +117,23 @@ class GPT_BA:
 
                 output, joints_index, ce_loss = gpt(quants_input, music_seq, quants_target, (up_codebook, down_codebook))
                 up_idx, down_idx = joints_index
-                up_idx, down_idx = up_idx.permute(0, 2, 1).float(), down_idx.permute(0, 2, 1).float()
+                up_idx, down_idx = up_idx.permute(0, 2, 1).float().contiguous(), \
+                    down_idx.permute(0, 2, 1).float().contiguous()
 
-                pose_sample = vqvae.module.decode((up_idx, down_idx), bs_chunks=N)
+                pose_sample, x_quantised = vqvae.module.decode((up_idx, down_idx), bs_chunks=N)
+
+                output[0] = x_quantised[0] + (output[0] - x_quantised[0]).detach()
+                output[1] = x_quantised[1] + (output[1] - x_quantised[1]).detach()
 
                 ba_loss = self.BA_Loss(pose_sample, music_beats[:, 8:])
 
-                loss = ce_loss + 3 * ba_loss
-
+                loss = ce_loss + ba_loss
                 loss.backward()
 
                 # update parameters
                 optimizer.step()
 
-                stats = {'updates': updates, 'loss': loss.item()}
+                stats = {'updates': updates, 'loss': loss.item(), 'CE_loss': ce_loss, 'BA_loss': ba_loss}
 
                 log.update(stats)
                 updates += 1
@@ -123,7 +145,7 @@ class GPT_BA:
                 filename = os.path.join(self.ckptdir, f'epoch_{epoch_i}.pt')
                 torch.save(checkpoint, filename)
             # Eval
-            if epoch_i % config.test_freq == 0 or epoch_i == 1:
+            if epoch_i % config.test_freq == 0:
                 with torch.no_grad():
                     print("Evaluation...")
                     gpt.eval()

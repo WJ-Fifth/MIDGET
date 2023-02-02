@@ -105,10 +105,12 @@ class VQVAE(nn.Module):
             self.encoders.append(encoder(level))
             self.decoders.append(decoder(level))
 
-        if use_bottleneck:
-            self.bottleneck = Bottleneck(l_bins, emb_width, mu, levels)
-        else:
-            self.bottleneck = NoBottleneck(levels)
+        # if use_bottleneck:
+        #     self.bottleneck = Bottleneck(l_bins, emb_width, mu, levels)
+        # else:
+        #     self.bottleneck = NoBottleneck(levels)
+
+        self.bottleneck = Bottleneck(l_bins, emb_width, mu, levels)
 
         self.downs_t = downs_t
         self.strides_t = strides_t
@@ -139,6 +141,9 @@ class VQVAE(nn.Module):
             end_level = self.levels
         assert len(zs) == end_level - start_level
         xs_quantised = self.bottleneck.decode(zs, start_level=start_level, end_level=end_level)
+
+        xs_quantised[0].requires_grad = True
+
         assert len(xs_quantised) == end_level - start_level
         # print(xs_quantised[0].shape)
 
@@ -146,7 +151,7 @@ class VQVAE(nn.Module):
         decoder, x_quantised = self.decoders[start_level], xs_quantised[0:1]
         x_out = decoder(x_quantised, all_levels=False)
         x_out = self.postprocess(x_out)
-        return x_out
+        return x_out, xs_quantised[0]
 
     def decode(self, zs, start_level=0, end_level=None, bs_chunks=1):
         if isinstance(zs, list):
@@ -157,13 +162,16 @@ class VQVAE(nn.Module):
         # z_chunks = [torch.chunk(z, bs_chunks, dim=0) for z in zs]
 
         x_outs = []
+        quantiseds = []
         for i in range(bs_chunks):
             zs_i = z_chunks[i]
             # zs_i = [z_chunk[i] for z_chunk in z_chunks]
 
-            x_out = self._decode(zs_i, start_level=start_level, end_level=end_level)
+            x_out, quantised = self._decode(zs_i, start_level=start_level, end_level=end_level)
             x_outs.append(x_out)
-        return torch.cat(x_outs, dim=0)
+            quantiseds.append(quantised)
+
+        return torch.cat(x_outs, dim=0), torch.cat(quantiseds, dim=0).permute(0, 2, 1).float().contiguous()
 
     def _encode(self, x, start_level=0, end_level=None):
         # Encode

@@ -625,7 +625,7 @@ def load_test_data_aist(data_dir, rotmat, move, external_wav=None, external_wav_
 
     music_data, dance_data = [], []
     fnames = sorted(os.listdir(data_dir))
-    fnames = fnames[:10]  # For debug
+    # fnames = fnames[:10]  # For debug
 
     for fname in fnames:
         path = os.path.join(data_dir, fname)

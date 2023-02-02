@@ -118,9 +118,11 @@ class VQVAER(nn.Module):
         # Decode
         if end_level is None:
             end_level = self.levels
-        # assert len(zs) == end_level - start_level
+        assert len(zs) == end_level - start_level
         xs_quantised = self.bottleneck.decode(zs, start_level=start_level, end_level=end_level)
-        # assert len(xs_quantised) == end_level - start_level
+        assert len(xs_quantised) == end_level - start_level
+
+        xs_quantised[0].requires_grad = True
 
         # Use only lowest level
         decoder, decoder_root, x_quantised = self.decoders[start_level], self.decoders_root[start_level], xs_quantised[
@@ -133,20 +135,23 @@ class VQVAER(nn.Module):
 
         _, _, cc = x_vel_out.size()
         x_out[:, :, :cc] = x_vel_out.clone()
-        return x_out
+        return x_out, xs_quantised[0]
 
     def decode(self, zs, start_level=0, end_level=None, bs_chunks=1):
         z_chunks = torch.chunk(zs, bs_chunks, dim=0)
         # z_chunks = [torch.chunk(z, bs_chunks, dim=0) for z in zs]
 
         x_outs = []
+        quantiseds = []
         for i in range(bs_chunks):
             zs_i = z_chunks[i]
             # zs_i = [z_chunk[i] for z_chunk in z_chunks]
 
-            x_out = self._decode(zs_i, start_level=start_level, end_level=end_level)
+            x_out, quantised = self._decode(zs_i, start_level=start_level, end_level=end_level)
             x_outs.append(x_out)
-        return torch.cat(x_outs, dim=0)
+            quantiseds.append(quantised)
+
+        return torch.cat(x_outs, dim=0), torch.cat(quantiseds, dim=0).permute(0, 2, 1).float().contiguous()
 
     def _encode(self, x, start_level=0, end_level=None):
         # Encode
