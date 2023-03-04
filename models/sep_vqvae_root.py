@@ -21,7 +21,7 @@ class SepVQVAER(nn.Module):
         self.vqvae_up = VQVAE(hps.up_half, len(smpl_up) * self.chanel_num)
         self.vqvae_down = VQVAER(hps.down_half, len(smpl_down) * self.chanel_num)
 
-    def decode(self, zs, start_level=0, end_level=None, bs_chunks=1):
+    def decode(self, zs, output, start_level=0, end_level=None, bs_chunks=1):
         """
         zs are list with two elements: z for up and z for down
         """
@@ -31,8 +31,9 @@ class SepVQVAER(nn.Module):
         else:
             zup = zs
             zdown = zs
-        xup, up_quantised = self.vqvae_up.decode(zup, end_level=end_level, bs_chunks=bs_chunks)
-        xdown, down_quantised = self.vqvae_down.decode(zdown, end_level=end_level, bs_chunks=bs_chunks)
+        xup = self.vqvae_up.decode(zup, end_level=end_level, bs_chunks=bs_chunks, output=output[0])
+        xdown = self.vqvae_down.decode(zdown, end_level=end_level, bs_chunks=bs_chunks, output=output[1])
+
         b, t, cup = xup.size()
         _, _, cdown = xdown.size()
         x = torch.zeros(b, t, (cup + cdown) // self.chanel_num, self.chanel_num).cuda()
@@ -40,7 +41,13 @@ class SepVQVAER(nn.Module):
         x[:, :, smpl_up] = xup.view(b, t, cup // self.chanel_num, self.chanel_num)
         x[:, :, smpl_down] = xdown.view(b, t, cdown // self.chanel_num, self.chanel_num)
 
-        return x.view(b, t, -1), [up_quantised, down_quantised]
+        # output[0] = up_quantised + (output[0] - up_quantised.detach())
+        # output[1] = down_quantised + (output[1] - up_quantised.detach())
+        #
+        # up_quantised = output[0] + (up_quantised - output[0]).detach()
+        # down_quantised = output[1] + (down_quantised - output[1]).detach()
+
+        return x.view(b, t, -1)
 
     def encode(self, x, start_level=0, end_level=None, bs_chunks=1):
         b, t, c = x.size()

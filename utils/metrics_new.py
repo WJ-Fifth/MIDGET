@@ -66,13 +66,13 @@ def quantized_metrics(predicted_pkl_root, gt_pkl_root):
     # pred_features_m = normalize(pred_features_m)
 
     # print(gt_freatures_k.mean(axis=0))
-    print(pred_features_k.mean(axis=0))
+    # print(pred_features_k.mean(axis=0))
     # print(gt_freatures_m.mean(axis=0))
-    print(pred_features_m.mean(axis=0))
+    # print(pred_features_m.mean(axis=0))
     # print(gt_freatures_k.std(axis=0))
-    print(pred_features_k.std(axis=0))
+    # print(pred_features_k.std(axis=0))
     # print(gt_freatures_m.std(axis=0))
-    print(pred_features_m.std(axis=0))
+    # print(pred_features_m.std(axis=0))
 
     # print(gt_freatures_k)
     # print(gt_freatures_m)
@@ -161,7 +161,7 @@ def calc_and_save_feats(root):
     pred_list = []
 
     for pkl in os.listdir(root):
-        print(pkl)
+        # print(pkl)
         if os.path.isdir(os.path.join(root, pkl)):
             continue
         joint3d = np.load(os.path.join(root, pkl), allow_pickle=True).item()['pred_position'][:1200, :]
@@ -185,7 +185,7 @@ if __name__ == '__main__':
     # pred_root = 'experiments/motion_gpt_new/vis/pkl/ep000080'
     # pred_root = 'experiments/actor_critic_new/eval/pkl/ep000001'
 
-    pred_root = 'experiments/motion_gpt_beat_align/eval/pkl/ep000020'
+    pred_root = 'experiments/GPT_BA_BCE_1/eval/pkl/ep000060'
 
     print('Calculating and saving features')
     calc_and_save_feats(gt_root)

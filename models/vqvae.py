@@ -135,30 +135,32 @@ class VQVAE(nn.Module):
         x = x.permute(0, 2, 1)
         return x
 
-    def _decode(self, zs, start_level=0, end_level=None):
+    def _decode(self, zs, start_level=0, end_level=None, output=None):
         # Decode
         if end_level is None:
             end_level = self.levels
         assert len(zs) == end_level - start_level
-        xs_quantised = self.bottleneck.decode(zs, start_level=start_level, end_level=end_level)
-
-        xs_quantised[0].requires_grad = True
-
+        xs_quantised = self.bottleneck.decode(zs, start_level=start_level, end_level=end_level, output=output)
+        # xs_quantised[0].requires_grad = True
         assert len(xs_quantised) == end_level - start_level
-        # print(xs_quantised[0].shape)
 
         # Use only lowest level
         decoder, x_quantised = self.decoders[start_level], xs_quantised[0:1]
         x_out = decoder(x_quantised, all_levels=False)
         x_out = self.postprocess(x_out)
-        return x_out, xs_quantised[0]
+        return x_out, xs_quantised
 
-    def decode(self, zs, start_level=0, end_level=None, bs_chunks=1):
+    def decode(self, zs, start_level=0, end_level=None, bs_chunks=1, output=None):
+
         if isinstance(zs, list):
             z_chunks = zs
+            out_chunks = output
         else:
             z_chunks = torch.chunk(zs, bs_chunks, dim=0)
-
+            if output is not None:
+                out_chunks = torch.chunk(output, bs_chunks, dim=0)
+            else:
+                out_chunks = [[None]]
         # z_chunks = [torch.chunk(z, bs_chunks, dim=0) for z in zs]
 
         x_outs = []
@@ -166,12 +168,14 @@ class VQVAE(nn.Module):
         for i in range(bs_chunks):
             zs_i = z_chunks[i]
             # zs_i = [z_chunk[i] for z_chunk in z_chunks]
+            out_i = out_chunks[i]
 
-            x_out, quantised = self._decode(zs_i, start_level=start_level, end_level=end_level)
+            x_out, quantised = self._decode(zs_i, start_level=start_level, end_level=end_level, output=out_i)
+
             x_outs.append(x_out)
-            quantiseds.append(quantised)
+            # quantiseds.append(quantised)
 
-        return torch.cat(x_outs, dim=0), torch.cat(quantiseds, dim=0).permute(0, 2, 1).float().contiguous()
+        return torch.cat(x_outs, dim=0)
 
     def _encode(self, x, start_level=0, end_level=None):
         # Encode
@@ -220,7 +224,6 @@ class VQVAE(nn.Module):
             x_out = decoder(xs_quantised[level:level + 1], all_levels=False)
             assert_shape(x_out, x_in.shape)
             x_outs.append(x_out)
-
 
         recons_loss = torch.zeros(()).to(x.device)
         regularization = torch.zeros(()).to(x.device)

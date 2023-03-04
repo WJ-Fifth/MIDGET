@@ -106,7 +106,7 @@ def _build_optimizer(config, model_vqvae, model_gpt):
 def prepare_dataloader(music_data, dance_data, batch_size):
     data_loader = torch.utils.data.DataLoader(
         MoDaSeq(music_data, dance_data),
-        num_workers=8,
+        num_workers=0,
         batch_size=batch_size,
         shuffle=True,
         pin_memory=True

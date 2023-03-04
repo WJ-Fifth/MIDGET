@@ -121,7 +121,12 @@ class BottleneckBlock(nn.Module):
         return x_l, fit
 
     def dequantise(self, x_l):
-        x = F.embedding(x_l.long(), self.k)
+        # self.k.requires_grad = True
+        x = F.embedding(x_l, self.k)
+        # print(self.k.requires_grad)
+        # exit()
+        # x.requires_grad = True
+        # self.k = self.k.detach()
         return x
 
     def encode(self, x):
@@ -138,16 +143,19 @@ class BottleneckBlock(nn.Module):
 
         return x_l, self.k
 
-    def decode(self, x_l):
+    def decode(self, x_l, x):
+        # x_l = x_l.long()
         N, T = x_l.shape
         width = self.emb_width
 
         # Dequantise
         x_d = self.dequantise(x_l)
-
+        if x is not None:
+            x_d = x + (x_d - x).detach()
         # Postprocess
         x_d = x_d.view(N, T, width).permute(0, 2, 1).contiguous()
 
+        # print(x_d.requires_grad)
         return x_d
 
     def forward(self, x, update_k=True):
@@ -198,10 +206,10 @@ class Bottleneck(nn.Module):
         zs, codebook = tmp[0]
         return [zs], codebook
 
-    def decode(self, zs, start_level=0, end_level=None):
+    def decode(self, zs, start_level=0, end_level=None, output=None):
         if end_level is None:
             end_level = self.levels
-        xs_quantised = [level_block.decode(z) for (level_block, z) in zip(self.level_blocks[start_level:end_level], zs)]
+        xs_quantised = [level_block.decode(z, out) for (level_block, z, out) in zip(self.level_blocks[start_level:end_level], zs, output)]
         return xs_quantised
 
     def forward(self, xs):
@@ -238,7 +246,7 @@ class NoBottleneck(nn.Module):
     def encode(self, xs):
         return xs
 
-    def decode(self, zs, start_level=0, end_level=None):
+    def decode(self, zs, start_level=0, end_level=None, output=None):
         if end_level is None:
             end_level = self.levels
         return zs

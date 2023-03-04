@@ -27,6 +27,8 @@ from scipy.spatial.transform import Rotation as R
 import os
 import shutil
 
+import pickle
+
 
 def eye(n, batch_shape):
     iden = np.zeros(np.concatenate([batch_shape, [n, n]]))
@@ -247,10 +249,14 @@ def write2pkl(dances, dance_names, config, expdir, epoch, rotmat):
     assert len(dances) == len(dance_names), \
         "number of generated dance != number of dance_names"
 
+    if not os.path.exists(os.path.join(expdir, "pkl_files")):
+        os.makedirs(os.path.join(expdir, "pkl_files"))
+
     if not os.path.exists(os.path.join(expdir, "pkl")):
         os.makedirs(os.path.join(expdir, "pkl"))
 
-    ep_path = os.path.join(expdir, "pkl", f"ep{epoch:06d}")
+    np_path = os.path.join(expdir, "pkl", f"ep{epoch:06d}")
+    ep_path = os.path.join(expdir, "pkl_files", f"ep{epoch:06d}")
 
     if not os.path.exists(ep_path):
         os.makedirs(ep_path)
@@ -265,11 +271,14 @@ def write2pkl(dances, dance_names, config, expdir, epoch, rotmat):
         pkl_data = {"pred_position": np_dance}
 
         dance_path = os.path.join(ep_path, dance_names[i] + '.pkl')
+        np_dance_path = os.path.join(np_path, dance_names[i] + '.pkl')
         # if not os.path.exists(dance_path):
         #     os.makedirs(dance_path)
 
         # with open(dance_path, 'w') as f:
-        np.save(dance_path, pkl_data)
+        np.save(np_dance_path, pkl_data)
+
+        save_pickle(pkl_data, dance_path)
 
 
 def pose_code2pkl(pcodes, dance_names, config, expdir, epoch):
@@ -369,7 +378,7 @@ def write2json(dances, dance_names, config, expdir, epoch):
                 f.write(frame_json)
 
 
-def visualizeAndWrite(results, config, expdir, dance_names, epoch, quants=None):
+def visualizeAndWrite(results, config, expdir, dance_names, epoch, quants=None, take_img=False):
     if config.rotmat:
         smpl = SMPL(model_path=config.smpl_dir, gender='MALE', batch_size=1)
     np_dances = []
@@ -473,8 +482,10 @@ def visualizeAndWrite(results, config, expdir, dance_names, epoch, quants=None):
     write2pkl(dance_datas, dance_names, config.testing, expdir, epoch, rotmat=config.rotmat)
     pose_code2pkl(quants, dance_names, config.testing, expdir, epoch)
     write2json(np_dances, dance_names, config.testing, expdir, epoch)
-    visualize(config.testing, dance_names, expdir, epoch, quants)
-    img2video(expdir, epoch)
+
+    if take_img is True:
+        visualize(config.testing, dance_names, expdir, epoch, quants)
+        img2video(expdir, epoch)
 
     json_dir = os.path.join(expdir, "jsons", f"ep{epoch:06d}")
     img_dir = os.path.join(expdir, "imgs", f"ep{epoch:06d}")
@@ -522,7 +533,7 @@ def load_data_aist(data_dir, interval=240, move=8, rotmat=False, external_wav=No
     tot = 0
     music_data, dance_data = [], []
     fnames = sorted(os.listdir(data_dir))
-    fnames = fnames[:10]  # For debug
+    # fnames = fnames[:10]  # For debug
 
     music_name = []
     if ".ipynb_checkpoints" in fnames:
@@ -597,7 +608,7 @@ def load_test_data(data_dir, data_type='2D'):
     tot = 0
     music_data, dance_data = [], []
     fnames = sorted(os.listdir(data_dir))
-    fnames = fnames[:10]  # For debug
+    # fnames = fnames[:10]  # For debug
 
     for fname in fnames:
         path = os.path.join(data_dir, fname)
@@ -1025,3 +1036,9 @@ def dir_setting(config):
         os.mkdir(sampledir)
 
     return ckptdir, evaldir, gtdir, visdir, expdir
+
+
+def save_pickle(data, file_name):
+    f = open(file_name, "wb")
+    pickle.dump(data, f)
+    f.close()

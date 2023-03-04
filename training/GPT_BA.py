@@ -10,6 +10,8 @@ import warnings
 from tqdm import tqdm
 import utils.build_util as build_util
 
+from models import gpt_model_ba, vqvae_root
+
 
 from scipy.ndimage import gaussian_filter
 import numpy as np
@@ -29,19 +31,17 @@ class GPT_BA:
             = build_util.build(config=self.config)
 
     def BCE_Loss(self, pred_motions, music_beats):
-        top_motion = pred_motions[:, :-1, :]
-        next_motion = pred_motions[:, 1:, :]
-
-        l2_distance = torch.mean(torch.square(top_motion - next_motion), dim=-1)
+        l2_distance = torch.mean(torch.square(pred_motions[:, :-1, :] - pred_motions[:, 1:, :]), dim=-1)
         motion_beats_prob = torch.exp(-l2_distance / 0.05 ** 2)
 
-        extra = torch.zeros(top_motion.shape[0])
+        extra = torch.zeros(pred_motions.shape[0])
         extra = extra.unsqueeze(1).to(self.device)
         motion_beats_prob = torch.cat((extra, motion_beats_prob), dim=1)
 
         bce_loss = torch.nn.BCELoss()
+        loss = bce_loss(motion_beats_prob, music_beats.float())
 
-        return bce_loss(motion_beats_prob, music_beats.float())
+        return loss
 
     def BA_Loss(self, pred_motions, music_beats):
         top_motion = pred_motions[:, :-1, :]
@@ -58,10 +58,11 @@ class GPT_BA:
         return ba_loss
 
     def train(self):
+        config = self.config
+        self.device = torch.device('cuda' if config.cuda else 'cpu')
         vqvae = self.init_models[0].eval()
         gpt = self.init_models[1].train()
 
-        config = self.config
         data = self.config.data
         training_data = self.training_data
         test_loader = self.test_loader
@@ -81,10 +82,10 @@ class GPT_BA:
         torch.manual_seed(config.seed)
 
         torch.cuda.manual_seed(config.seed)
-        self.device = torch.device('cuda' if config.cuda else 'cpu')
+
 
         # Training Loop
-        for epoch_i in range(1, config.epoch + 1):
+        for epoch_i in range(41, config.epoch + 1):
             log.set_progress(epoch_i, len(training_data))
 
             for batch_i, batch in enumerate(training_data):
@@ -117,18 +118,30 @@ class GPT_BA:
 
                 output, joints_index, ce_loss = gpt(quants_input, music_seq, quants_target, (up_codebook, down_codebook))
                 up_idx, down_idx = joints_index
-                up_idx, down_idx = up_idx.permute(0, 2, 1).float().contiguous(), \
-                    down_idx.permute(0, 2, 1).float().contiguous()
+                up_idx, down_idx = up_idx.permute(0, 2, 1).long().contiguous(), \
+                    down_idx.permute(0, 2, 1).long().contiguous()
 
-                pose_sample, x_quantised = vqvae.module.decode((up_idx, down_idx), bs_chunks=N)
+                pose_sample = vqvae.module.decode((up_idx, down_idx), output=output, bs_chunks=N)
 
-                output[0] = x_quantised[0] + (output[0] - x_quantised[0]).detach()
-                output[1] = x_quantised[1] + (output[1] - x_quantised[1]).detach()
+                # x_quantised[0] = output[0] + (x_quantised[0] - output[0]).detach()
+                # x_quantised[1] = output[1] + (x_quantised[1] - output[1]).detach()
 
-                ba_loss = self.BA_Loss(pose_sample, music_beats[:, 8:])
+                ba_loss = self.BCE_Loss(pose_sample, music_beats[:, 8:])
 
-                loss = ce_loss + ba_loss
+                loss = ba_loss + ce_loss
+
                 loss.backward()
+
+
+                # for param, name in zip(gpt.parameters(), gpt.named_parameters()):
+                #     if param.grad is not None:
+                #         print(name[0], ": Not None!")
+                #     else:
+                #         continue
+                #         print(name[0])
+
+                assert all(param.grad is not None for param in gpt.parameters()), \
+                    'loss should depend differentiably on all neural network weights'
 
                 # update parameters
                 optimizer.step()
@@ -141,11 +154,11 @@ class GPT_BA:
             checkpoint = {'model': gpt.state_dict(), 'config': config, 'epoch': epoch_i}
 
             # Save checkpoint
-            if epoch_i % config.save_per_epochs == 0:
+            if epoch_i % config.save_per_epochs == 0 or epoch_i == 1:
                 filename = os.path.join(self.ckptdir, f'epoch_{epoch_i}.pt')
                 torch.save(checkpoint, filename)
             # Eval
-            if epoch_i % config.test_freq == 0:
+            if epoch_i % config.test_freq == 0 and epoch_i == 0:
                 with torch.no_grad():
                     print("Evaluation...")
                     gpt.eval()
@@ -167,7 +180,7 @@ class GPT_BA:
 
                         zs = gpt.module.sample(x, cond=music_seq,
                                                shift=config.sample_shift if hasattr(config, 'sample_shift') else None, codebooks=(up_codebook, down_codebook))
-                        pose_sample = vqvae.module.decode(zs)
+                        pose_sample = vqvae.module.decode(zs, output=(None, None))
 
                         # Calculate the position of the predicted pose relative to the global vector
                         if config.global_vel:
@@ -206,7 +219,7 @@ class GPT_BA:
 
             ckpt_path = os.path.join(self.ckptdir, f"epoch_{epoch_tested}.pt")
             self.device = torch.device('cuda' if config.cuda else 'cpu')
-            print("Evaluation...")
+            print("Evaluation... ", ckpt_path)
             checkpoint = torch.load(ckpt_path)
             gpt.load_state_dict(checkpoint['model'])
             # gpt.eval()
@@ -239,7 +252,7 @@ class GPT_BA:
                                        shift=config.sample_shift if hasattr(config, 'sample_shift') else None,
                                        codebooks=(up_codebook, down_codebook))
 
-                pose_sample = vqvae.module.decode(zs)
+                pose_sample = vqvae.module.decode(zs, output=(None, None))
 
                 if config.global_vel:
                     global_vel = pose_sample[:, :, :3].clone()

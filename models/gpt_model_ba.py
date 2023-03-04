@@ -16,7 +16,6 @@ from torch.nn import functional as F
 from .resnet import Resnet1D
 
 
-
 class GPT_BA_Model(nn.Module):
     """  the full GPT language model, with a context size of block_size """
 
@@ -48,6 +47,7 @@ class GPT_BA_Model(nn.Module):
         probs_up_codes = torch.matmul(probs_up, up_codebook.t())
         probs_down_codes = torch.matmul(probs_up, down_codebook.t())
         # print("up top select", ix_up.shape)
+
         return (probs_up_codes, probs_down_codes), (idx_up, idx_down)
 
     def sample(self, xs, cond, shift=None, codebooks=None):
@@ -91,13 +91,15 @@ class GPT_BA_Model(nn.Module):
         if targets is not None:
             targets_up, targets_down = targets
 
-        music_feature = self.music_downsample(cond)
-        if music_feature.shape[0] > 1:
-            input_music_feature = music_feature[:, :-1]
-        else:
-            input_music_feature = music_feature
+        # print(cond.shape)
+        music_feature = self.music_downsample(cond[:, :232])
+        # if music_feature.shape[0] > 1:
+        #     print(music_feature.shape)
+        #     input_music_feature = music_feature[:, :-1]
+        # else:
+        #     input_music_feature = music_feature
 
-        feat = self.gpt_base(x_up, x_down, input_music_feature)
+        feat = self.gpt_base(x_up, x_down, music_feature)
 
         logits_up, logits_down, loss_up, loss_down = self.gpt_head(feat, targets)
 
