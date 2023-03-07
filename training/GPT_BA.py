@@ -10,6 +10,8 @@ import warnings
 from tqdm import tqdm
 import utils.build_util as build_util
 
+import torchsummary
+
 from models import gpt_model_ba, vqvae_root
 
 
@@ -57,11 +59,20 @@ class GPT_BA:
         ba_loss = torch.mean(torch.square(music_beats - motion_beats_prob))
         return ba_loss
 
+    def get_parameter_number(self, model):
+        total_num = sum(p.numel() for p in model.parameters())
+        trainable_num = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        return {'Total': total_num, 'Trainable': trainable_num}
+
     def train(self):
         config = self.config
         self.device = torch.device('cuda' if config.cuda else 'cpu')
         vqvae = self.init_models[0].eval()
         gpt = self.init_models[1].train()
+
+        print(self.get_parameter_number(gpt))
+        print(self.get_parameter_number(vqvae))
+        exit()
 
         data = self.config.data
         training_data = self.training_data
@@ -85,7 +96,7 @@ class GPT_BA:
 
 
         # Training Loop
-        for epoch_i in range(41, config.epoch + 1):
+        for epoch_i in range(61, config.epoch + 1):
             log.set_progress(epoch_i, len(training_data))
 
             for batch_i, batch in enumerate(training_data):
@@ -266,4 +277,4 @@ class GPT_BA:
                         zs[ii][0].cpu().data.numpy()[0] for ii in range(len(zs)))
                 else:
                     quants_out[self.dance_names[i_eval]] = zs[0].cpu().data.numpy()[0]
-            visualizeAndWrite(results, config, self.evaldir, self.dance_names, epoch_tested, quants_out)
+            visualizeAndWrite(results, config, self.evaldir, self.dance_names, epoch_tested, quants_out, take_img=True)

@@ -101,7 +101,7 @@ data:
 testing:
     height: 540
     width: 960
-    ckpt_epoch: 60
+    ckpt_epoch: 75
 
 
 vqvae_weight: 'experiments/sep_vqvae_root/ckpt/epoch_500.pt'
@@ -109,8 +109,8 @@ expname: GPT_BA_BCE_1
 init_weight: 'experiments/GPT_BA_BCE_1/ckpt/epoch_60.pt'
 #init_weight: ''
 
-need_not_train_data: True
-#need_not_test_data: True
+#need_not_train_data: True
+need_not_test_data: True
 
 epoch: 100
 batch_size: 32
@@ -119,7 +119,7 @@ save_per_epochs: 5
 test_freq: 20
 log_per_updates: 1
 seed: 42
-rotmat: True
+rotmat: False
 cuda: True
 global_vel: True
 ds_rate: 1

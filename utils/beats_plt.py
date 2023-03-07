@@ -103,12 +103,13 @@ if __name__ == "__main__":
     times = librosa.times_like(o_env, sr=sr)
     onest_frames = librosa.onset.onset_detect(onset_envelope=o_env, sr=sr)
 
-    motion_result = "./experiments/actor_critic_new/eval/pkl/ep000001/gJB_sBM_cAll_d08_mJB5_ch01.json.pkl.npy"
+    motion_result = "./experiments/GPT_BA_BCE_1/eval/pkl/ep000020/gJB_sBM_cAll_d08_mJB5_ch01.json.pkl.npy"
     motion_result = np.load(motion_result, allow_pickle=True).item()['pred_position'][:, :]
     keypoints3d = motion_result.reshape(-1, 24, 3)
     # motion_beats = motion_peak_onehot(keypoints3d)[:2881]
     # motion_beats = motion_peak_onehot(keypoints3d)[15:]
-    motion_beats = motion_peak_onehot(keypoints3d)[3:]
+    motion_beats = motion_peak_onehot(keypoints3d)[:-11]
+    # motion_beats = motion_peak_onehot(keypoints3d)[11:]
 
     pre_times = times
     # exit()

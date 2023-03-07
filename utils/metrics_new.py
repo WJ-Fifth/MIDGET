@@ -16,16 +16,6 @@ def normalize(feat, feat2):
 
 
 def quantized_metrics(predicted_pkl_root, gt_pkl_root):
-    pred_features_k = []
-    pred_features_m = []
-    gt_freatures_k = []
-    gt_freatures_m = []
-
-    # for pkl in os.listdir(predicted_pkl_root):
-    #     pred_features_k.append(np.load(os.path.join(predicted_pkl_root, 'kinetic_features', pkl))) 
-    #     pred_features_m.append(np.load(os.path.join(predicted_pkl_root, 'manual_features_new', pkl)))
-    #     gt_freatures_k.append(np.load(os.path.join(predicted_pkl_root, 'kinetic_features', pkl)))
-    #     gt_freatures_m.append(np.load(os.path.join(predicted_pkl_root, 'manual_features_new', pkl)))
 
     pred_features_k = [np.load(os.path.join(predicted_pkl_root, 'kinetic_features', pkl)) for pkl in
                        os.listdir(os.path.join(predicted_pkl_root, 'kinetic_features'))]
@@ -44,38 +34,9 @@ def quantized_metrics(predicted_pkl_root, gt_pkl_root):
 
     #   T x 24 x 3 --> 72
     # T x72 -->32
-    # print(gt_freatures_k.mean(axis=0))
-    # print(pred_features_k.mean(axis=0))
-    # print(gt_freatures_m.mean(axis=0))
-    # print(pred_features_m.mean(axis=0))
-    # print(gt_freatures_k.std(axis=0))
-    # print(pred_features_k.std(axis=0))
-    # print(gt_freatures_m.std(axis=0))
-    # print(pred_features_m.std(axis=0))
-
-    # gt_freatures_k = normalize(gt_freatures_k)
-    # gt_freatures_m = normalize(gt_freatures_m) 
-    # pred_features_k = normalize(pred_features_k)
-    # pred_features_m = normalize(pred_features_m)     
 
     gt_freatures_k, pred_features_k = normalize(gt_freatures_k, pred_features_k)
     gt_freatures_m, pred_features_m = normalize(gt_freatures_m, pred_features_m)
-    # # pred_features_k = normalize(pred_features_k)
-    # pred_features_m = normalize(pred_features_m) 
-    # pred_features_k = normalize(pred_features_k)
-    # pred_features_m = normalize(pred_features_m)
-
-    # print(gt_freatures_k.mean(axis=0))
-    # print(pred_features_k.mean(axis=0))
-    # print(gt_freatures_m.mean(axis=0))
-    # print(pred_features_m.mean(axis=0))
-    # print(gt_freatures_k.std(axis=0))
-    # print(pred_features_k.std(axis=0))
-    # print(gt_freatures_m.std(axis=0))
-    # print(pred_features_m.std(axis=0))
-
-    # print(gt_freatures_k)
-    # print(gt_freatures_m)
 
     print('Calculating metrics')
 
@@ -95,8 +56,6 @@ def quantized_metrics(predicted_pkl_root, gt_pkl_root):
 def calc_fid(kps_gen, kps_gt):
     print(kps_gen.shape)
     print(kps_gt.shape)
-
-    # kps_gen = kps_gen[:20, :]
 
     mu_gen = np.mean(kps_gen, axis=0)
     sigma_gen = np.cov(kps_gen, rowvar=False)
@@ -157,22 +116,15 @@ def calc_and_save_feats(root):
     if not os.path.exists(os.path.join(root, 'manual_features_new')):
         os.mkdir(os.path.join(root, 'manual_features_new'))
 
-    # gt_list = []
-    pred_list = []
-
     for pkl in os.listdir(root):
-        # print(pkl)
+
         if os.path.isdir(os.path.join(root, pkl)):
             continue
         joint3d = np.load(os.path.join(root, pkl), allow_pickle=True).item()['pred_position'][:1200, :]
-        # print(extract_manual_features(joint3d.reshape(-1, 24, 3)))
+
         roott = joint3d[:1, :3]  # the root Tx72 (Tx(24x3))
-        # print(roott)
+
         joint3d = joint3d - np.tile(roott, (1, 24))  # Calculate relative offset with respect to root
-        # print('==============after fix root ============')
-        # print(extract_manual_features(joint3d.reshape(-1, 24, 3)))
-        # print('==============bla============')
-        # print(extract_manual_features(joint3d.reshape(-1, 24, 3)))
         # np_dance[:, :3] = root
         np.save(os.path.join(root, 'kinetic_features', pkl), extract_kinetic_features(joint3d.reshape(-1, 24, 3)))
         np.save(os.path.join(root, 'manual_features_new', pkl), extract_manual_features(joint3d.reshape(-1, 24, 3)))
@@ -185,7 +137,7 @@ if __name__ == '__main__':
     # pred_root = 'experiments/motion_gpt_new/vis/pkl/ep000080'
     # pred_root = 'experiments/actor_critic_new/eval/pkl/ep000001'
 
-    pred_root = 'experiments/GPT_BA_BCE_1/eval/pkl/ep000060'
+    pred_root = 'experiments/GPT_BA_BCE_1/eval/pkl/ep000075'
 
     print('Calculating and saving features')
     calc_and_save_feats(gt_root)

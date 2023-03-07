@@ -50,7 +50,7 @@ def calc_ba_score(root):
     # gt_list = []
     ba_scores = []
     best_score = 0.3
-    lowest_score = 0.2
+    lowest_score = 0.15
     best_motion = []
     lowest_motion = []
 
@@ -87,7 +87,7 @@ if __name__ == '__main__':
     # pred_root = './experiments/motion_gpt_new/vis/pkl/ep000080'
 
     # pred_root = './experiments/cc_motion_gpt/eval/pkl/ep000400'
-    pred_root = 'experiments/GPT_BA_BCE_1/eval/pkl/ep000060'
+    pred_root = 'experiments/GPT_BA_BCE_1/eval/pkl/ep000020'
 
     score = calc_ba_score(pred_root)
 
