@@ -108,8 +108,8 @@ if __name__ == "__main__":
     keypoints3d = motion_result.reshape(-1, 24, 3)
     # motion_beats = motion_peak_onehot(keypoints3d)[:2881]
     # motion_beats = motion_peak_onehot(keypoints3d)[15:]
-    motion_beats = motion_peak_onehot(keypoints3d)[:-11]
-    # motion_beats = motion_peak_onehot(keypoints3d)[11:]
+    # motion_beats = motion_peak_onehot(keypoints3d)[:-11]
+    motion_beats = motion_peak_onehot(keypoints3d)[11:]
 
     pre_times = times
     # exit()

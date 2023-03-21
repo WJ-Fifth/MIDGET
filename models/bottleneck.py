@@ -132,7 +132,7 @@ class BottleneckBlock(nn.Module):
     def encode(self, x):
         N, width, T = x.shape
 
-        # Preprocess.
+        # Preprocess.x_l
         x, prenorm = self.preprocess(x)
 
         # Quantise

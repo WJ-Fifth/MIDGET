@@ -36,18 +36,40 @@ def calc_db(keypoints, name):
     kinetic_vel = np.mean(np.sqrt(np.sum((keypoints[1:] - keypoints[:-1]) ** 2, axis=2)), axis=1)
     kinetic_vel = G(kinetic_vel, 5)
     motion_beats = argrelextrema(kinetic_vel, np.less)
-    return motion_beats, len(kinetic_vel)
+    return motion_beats[0], len(kinetic_vel)
 
 
 def BA(music_beats, motion_beats, sigma=3):
     ba = 0
     for bb in music_beats:
-        ba += np.exp(-np.min((motion_beats[0] - bb) ** 2) / 2 / sigma ** 2)
-    return (ba / len(music_beats))
+        ba += np.exp(-np.min((motion_beats - bb) ** 2) / 2 / sigma ** 2)
+    return ba / len(music_beats)
+
+
+def BC(music_beats, motion_beats, sigma=3):
+    bc = 0
+    for motion_beat in motion_beats:
+        bc += np.exp(-np.min((music_beats - motion_beat) ** 2) / 2 / sigma ** 2)
+    return bc / len(motion_beats)
+
+
+def alignment_score(music_beats, motion_beats, sigma=3):
+    """Calculate alignment score between music and motion."""
+    if motion_beats.sum() == 0:
+        return 0.0
+    music_beat_idxs = np.where(music_beats)[0]
+    motion_beat_idxs = np.where(motion_beats)[0]
+    score_all = []
+    for motion_beat_idx in motion_beat_idxs:
+        dists = np.abs(music_beat_idxs - motion_beat_idx).astype(np.float32)
+        ind = np.argmin(dists)
+        score = np.exp(- dists[ind] ** 2 / 2 / sigma ** 2)
+        score_all.append(score)
+    return sum(score_all) / len(score_all)
 
 
 def calc_ba_score(root):
-    # gt_list = []
+    bc_scores = []
     ba_scores = []
     best_score = 0.3
     lowest_score = 0.15
@@ -63,7 +85,10 @@ def calc_ba_score(root):
         music_beats = get_mb(pkl.split('.')[0] + '.json', length)
 
         single_score = BA(music_beats, dance_beats)
+        bc_score = BC(music_beats, dance_beats)
+
         ba_scores.append(single_score)
+        bc_scores.append(bc_score)
 
         if single_score > best_score:
             best_motion.append(pkl)
@@ -78,7 +103,7 @@ def calc_ba_score(root):
 
     print(len(ba_scores))
 
-    return np.mean(ba_scores)
+    return np.mean(ba_scores), np.mean(bc_scores)
 
 
 if __name__ == '__main__':
@@ -86,9 +111,10 @@ if __name__ == '__main__':
     # pred_root = './experiments/motion_gpt_new/vis/pkl/ep000040'
     # pred_root = './experiments/motion_gpt_new/vis/pkl/ep000080'
 
-    # pred_root = './experiments/cc_motion_gpt/eval/pkl/ep000400'
-    pred_root = 'experiments/GPT_BA_BCE_1/eval/pkl/ep000020'
+    pred_root = './experiments/GPT_BA_BCE_1/eval/pkl/ep000040'
+    # pred_root = 'experiments/motion_gpt_only_2/eval/pkl/ep000080'
 
-    score = calc_ba_score(pred_root)
+    ba_scores, bc_scores = calc_ba_score(pred_root)
 
-    print('%.4f' % score)
+    print('Beat Align Score: %.4f' % ba_scores)
+    print('Beat Consistency Score: %.4f' % bc_scores)

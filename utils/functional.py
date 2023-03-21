@@ -28,6 +28,7 @@ import os
 import shutil
 
 import pickle
+import re
 
 
 def eye(n, batch_shape):
@@ -265,7 +266,7 @@ def write2pkl(dances, dance_names, config, expdir, epoch, rotmat):
         os.makedirs(np_path)
 
     # print("Writing Json...")
-    for i in tqdm(range(len(dances)), desc='Generating Jsons'):
+    for i in tqdm(range(len(dances)), desc='Generating pkls'):
         # if rotmat:
         #     mat, trans = dances[i]
         #     pkl_data = {"pred_motion": mat, "pred_trans": trans}
@@ -273,8 +274,13 @@ def write2pkl(dances, dance_names, config, expdir, epoch, rotmat):
         np_dance = dances[i]
         pkl_data = {"pred_position": np_dance}
 
-        dance_path = os.path.join(ep_path, dance_names[i] + '.pkl')
-        np_dance_path = os.path.join(np_path, dance_names[i] + '.pkl')
+        name = dance_names[i]
+
+        if name.endswith('.json'):
+            name = name[:-5]
+
+        dance_path = os.path.join(ep_path, name + '.pkl')
+        np_dance_path = os.path.join(np_path, name)
         # if not os.path.exists(dance_path):
         #     os.makedirs(dance_path)
 
@@ -483,11 +489,12 @@ def visualizeAndWrite(results, config, expdir, dance_names, epoch, quants=None, 
             np_dance[:, 2 * 8:2 * 9] = root
             np_dances.append(np_dance)
     write2pkl(dance_datas, dance_names, config.testing, expdir, epoch, rotmat=config.rotmat)
-    pose_code2pkl(quants, dance_names, config.testing, expdir, epoch)
+    if quants is not None:
+        pose_code2pkl(quants, dance_names, config.testing, expdir, epoch)
     write2json(np_dances, dance_names, config.testing, expdir, epoch)
 
     if take_img is True:
-        visualize(config.testing, dance_names, expdir, epoch, quants)
+        visualize(config.testing, dance_names, expdir, epoch, quants=None)
         img2video(expdir, epoch)
 
     json_dir = os.path.join(expdir, "jsons", f"ep{epoch:06d}")
@@ -536,7 +543,7 @@ def load_data_aist(data_dir, interval=240, move=8, rotmat=False, external_wav=No
     tot = 0
     music_data, dance_data = [], []
     fnames = sorted(os.listdir(data_dir))
-    fnames = fnames[:10]  # For debug
+    # fnames = fnames[:10]  # For debug
 
     music_name = []
     if ".ipynb_checkpoints" in fnames:

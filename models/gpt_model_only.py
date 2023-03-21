@@ -15,106 +15,81 @@ import torch.nn as nn
 from torch.nn import functional as F
 from .resnet import Resnet1D
 
+smpl_down = [0, 1, 2, 4, 5, 7, 8, 10, 11]
+smpl_up = [3, 6, 9, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
 
-class GPT_BA_Model(nn.Module):
+
+class GPT_ONLY(nn.Module):
     """  the full GPT language model, with a context size of block_size """
 
     def __init__(self, config):
         super().__init__()
         self.music_downsample = MusicDownSample(config)
+        self.Encoder = Encoder(config)
         self.gpt_base = CrossCondGPTBase(config.base)
         self.gpt_head = CrossCondGPTHead(config.head)
         self.block_size = config.block_size
+        self.up_decoder = Decoder(output_channel=45)
+        self.down_decoder = Decoder(output_channel=27)
+        self.root_decoder = Decoder(output_channel=config.joint_channel)
+        self.chanel_num = config.joint_channel
 
     def get_block_size(self):
         return self.block_size
 
-    def postprocess(self, x_l, x_d):
-        # [NT, C] -> NTC -> NCT
-        N, T, _ = x_l.shape
-        x_d = x_d.view(N, T, -1).permute(0, 2, 1).contiguous()
-        x_l = x_l.view(N, T)
-        return x_l, x_d
-
-    def top_select(self, logits_up, logits_down, up_codebook, down_codebook):
-        probs_up = F.softmax(logits_up, dim=-1)
-        probs_down = F.softmax(logits_down, dim=-1)
-        # print("probs up", probs_up.shape)
-
-        _, idx_up = torch.topk(probs_up, k=1, dim=-1)
-        _, idx_down = torch.topk(probs_down, k=1, dim=-1)
-
-        probs_up_codes = torch.matmul(probs_up, up_codebook.t())
-        probs_down_codes = torch.matmul(probs_up, down_codebook.t())
-        # print("up top select", ix_up.shape)
-
-        return (probs_up_codes, probs_down_codes), (idx_up, idx_down)
-
-    def sample(self, xs, cond, shift=None, codebooks=None):
-        block_size = self.get_block_size() - 1
+    def sample(self, xs, cond, shift=None):
+        block_size = self.get_block_size()
         if shift is not None:
             block_shift = min(shift, block_size)
         else:
             block_shift = block_size
-        x_up, x_down = xs
+
         for k in range(29, cond.size(1) // 8):
-            x_cond_up = x_up if x_up.size(1) <= block_size else x_up[:, -(
-                    block_shift + (k - block_size - 1) % (block_size - block_shift + 1)):]
-            x_cond_down = x_down if x_down.size(1) <= block_size else x_down[:, -(
-                    block_shift + (k - block_size - 1) % (block_size - block_shift + 1)):]  # crop context if needed
+            x_cond = xs if xs.size(1) <= block_size else xs[:, -(
+                    block_shift + (k - block_size - 1) % (block_size - block_shift + 1)) * 8:]  # crop context if needed
 
             cond_input = cond[:, :(k + 1) * 8] if k < block_size else cond[:, (k - (
                     block_shift + (k - block_size - 1) % (block_size - block_shift + 1)) + 1) * 8: (k + 1) * 8]
 
-            _, logits, _ = self.forward((x_cond_up, x_cond_down), cond_input, targets=None, codebooks=codebooks)
+            # print(x_cond.shape)
+            # print(cond_input.shape)
+            preds, _ = self.forward(x_cond, cond_input)
             # jj += 1
             # pluck the logits at the final step and scale by temperature
-            logit_up, logit_down = logits
-            ix_up = logit_up[:, -1, :]
-            ix_down = logit_down[:, -1, :]
+            pose_sample = preds[:, -8:, :]
 
             # append to the sequence and continue
-            x_up = torch.cat((x_up, ix_up), dim=1)
-            x_down = torch.cat((x_down, ix_down), dim=1)
+            xs = torch.cat((xs, pose_sample), dim=1)
 
-        return x_up.view(1, 1, -1), x_down.view(1, 1, -1)
+        return xs
 
-    def forward(self, xs, cond, targets=None, codebooks=None):
-        (x_up, x_down) = xs
+    def forward(self, idxs, cond, targets=None):
 
-        if codebooks is not None:
-            (up_codebook, down_codebook) = codebooks
+        music_feature = self.music_downsample(cond)
+        if music_feature.shape[0] > 1:
+            input_music_feature = music_feature[:, :-1]
         else:
-            (up_codebook, down_codebook) = None, None
+            input_music_feature = music_feature
 
-        (targets_up, targets_down) = None, None
-        if targets is not None:
-            targets_up, targets_down = targets
+        idx_up, idx_down = self.Encoder(idxs)
 
-        # print(cond.shape)
-        music_feature = self.music_downsample(cond[:, :232])
-        # if music_feature.shape[0] > 1:
-        #     print(music_feature.shape)
-        #     input_music_feature = music_feature[:, :-1]
-        # else:
-        #     input_music_feature = music_feature
+        feat = self.gpt_base(idx_up, idx_down, input_music_feature)
 
-        feat = self.gpt_base(x_up, x_down, music_feature)
+        logits_up, logits_down = self.gpt_head(feat, targets)
 
-        logits_up, logits_down, loss_up, loss_down = self.gpt_head(feat, targets)
+        x_up = self.up_decoder(logits_up)
+        x_down = self.down_decoder(logits_down)
 
-        (probs_up_codes, probs_down_codes), (idx_up, idx_down) = \
-            self.top_select(logits_up, logits_down, up_codebook, down_codebook)
+        x_root = self.root_decoder(logits_down)
 
-        # idx_up = probs_up_codes + (idx_up - probs_up_codes).detach()
-        # idx_down = probs_down_codes + (idx_down - probs_down_codes).detach()
+        b, t, cup = x_up.size()
+        _, _, cdown = x_down.size()
 
-        if loss_up is not None and loss_down is not None:
-            loss = loss_up + loss_down
-        else:
-            loss = None
+        x = torch.zeros(b, t, (cup + cdown) // self.chanel_num, self.chanel_num).cuda()
+        x[:, :, smpl_up] = x_up.view(b, t, cup // self.chanel_num, self.chanel_num)
+        x[:, :, smpl_down] = x_down.view(b, t, cdown // self.chanel_num, self.chanel_num)
 
-        return [probs_up_codes, probs_down_codes], (idx_up, idx_down), loss
+        return x.view(b, t, -1), x_root.view(b, t, -1)
 
 
 class MusicDownSample(nn.Module):
@@ -161,6 +136,253 @@ class MusicDownSample(nn.Module):
         # x: NTC [-1,1] <- NCT [-1,1]
         x = x.permute(0, 2, 1)
         return x
+
+    def configure_optimizers(self, train_config):
+        """
+        This long function is unfortunately doing something very simple and is being very defensive:
+        We are separating out all parameters of the model into two buckets: those that will experience
+        weight decay for regularization and those that won't (biases, and layernorm/embedding weights).
+        We are then returning the PyTorch optimizer object.
+        """
+
+        # separate out all parameters to those that will and won't experience regularizing weight decay
+        decay = set()
+        no_decay = set()
+        whitelist_weight_modules = (torch.nn.Linear,)
+        blacklist_weight_modules = (torch.nn.LayerNorm, torch.nn.Embedding)
+        for mn, m in self.named_modules():
+            for pn, p in m.named_parameters():
+                fpn = '%s.%s' % (mn, pn) if mn else pn  # full param name
+
+                if pn.endswith('bias'):
+                    # all biases will not be decayed
+                    no_decay.add(fpn)
+                elif pn.endswith('weight') and isinstance(m, whitelist_weight_modules):
+                    # weights of whitelist modules will be weight decayed
+                    decay.add(fpn)
+                elif pn.endswith('weight') and isinstance(m, blacklist_weight_modules):
+                    # weights of blacklist modules will NOT be weight decayed
+                    no_decay.add(fpn)
+
+        # special case the position embedding parameter in the root GPT module as not decayed
+        no_decay.add('pos_emb')
+
+        # validate that we considered every parameter
+        param_dict = {pn: p for pn, p in self.named_parameters()}
+        inter_params = decay & no_decay
+        union_params = decay | no_decay
+        assert len(inter_params) == 0, "parameters %s made it into both decay/no_decay sets!" % (str(inter_params),)
+        assert len(
+            param_dict.keys() - union_params) == 0, "parameters %s were not separated into either decay/no_decay set!" \
+                                                    % (str(param_dict.keys() - union_params),)
+
+        # create the pytorch optimizer object
+        optim_groups = [
+            {"params": [param_dict[pn] for pn in sorted(list(decay))], "weight_decay": train_config.weight_decay},
+            {"params": [param_dict[pn] for pn in sorted(list(no_decay))], "weight_decay": 0.0},
+        ]
+        optimizer = torch.optim.AdamW(optim_groups, lr=train_config.learning_rate, betas=train_config.betas)
+        return optimizer
+
+
+class Encoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        input_channel = 72
+        output_channel = 72
+        down_rate = 3
+        stride = 2
+        width = 512
+        depth = 3
+        m_conv = 1.0
+        self.chanel_num = 3
+
+        kernel_size, pad = stride * 2, stride // 2
+
+        blocks = []
+
+        for i in range(down_rate):
+            block = nn.Sequential(
+                nn.Conv1d(in_channels=input_channel if i == 0 else width, out_channels=width, kernel_size=kernel_size,
+                          stride=stride, padding=pad),
+                Resnet1D(n_in=width, n_depth=depth, m_conv=m_conv,
+                         dilation_growth_rate=1, dilation_cycle=None, zero_out=False, res_scale=False),
+            )
+            blocks.append(block)
+        block = nn.Conv1d(in_channels=width, out_channels=output_channel, kernel_size=3, stride=1, padding=1)
+        blocks.append(block)
+
+        self.model = nn.Sequential(*blocks)
+
+    def forward(self, x):
+        x_in = self.preprocess(x)
+        x_out = self.model(x_in)
+        x_out = self.postprocess(x_out)
+
+        b, t, c = x_out.size()
+        x_out = x_out.view(b, t, c // self.chanel_num, self.chanel_num)
+
+        x_up = x_out[:, :, smpl_up].reshape(b, t, -1)
+        x_down = x_out[:, :, smpl_down].reshape(b, t, -1)
+
+        return x_up, x_down
+
+    def preprocess(self, x):
+        # x: NTC [-1,1] -> NCT [-1,1]
+        assert len(x.shape) == 3
+        x = x.permute(0, 2, 1).float()
+        return x
+
+    def postprocess(self, x):
+        # x: NTC [-1,1] <- NCT [-1,1]
+        x = x.permute(0, 2, 1)
+        return x
+
+    def configure_optimizers(self, train_config):
+        """
+        This long function is unfortunately doing something very simple and is being very defensive:
+        We are separating out all parameters of the model into two buckets: those that will experience
+        weight decay for regularization and those that won't (biases, and layernorm/embedding weights).
+        We are then returning the PyTorch optimizer object.
+        """
+
+        # separate out all parameters to those that will and won't experience regularizing weight decay
+        decay = set()
+        no_decay = set()
+        whitelist_weight_modules = (torch.nn.Linear,)
+        blacklist_weight_modules = (torch.nn.LayerNorm, torch.nn.Embedding)
+        for mn, m in self.named_modules():
+            for pn, p in m.named_parameters():
+                fpn = '%s.%s' % (mn, pn) if mn else pn  # full param name
+
+                if pn.endswith('bias'):
+                    # all biases will not be decayed
+                    no_decay.add(fpn)
+                elif pn.endswith('weight') and isinstance(m, whitelist_weight_modules):
+                    # weights of whitelist modules will be weight decayed
+                    decay.add(fpn)
+                elif pn.endswith('weight') and isinstance(m, blacklist_weight_modules):
+                    # weights of blacklist modules will NOT be weight decayed
+                    no_decay.add(fpn)
+
+        # special case the position embedding parameter in the root GPT module as not decayed
+        no_decay.add('pos_emb')
+
+        # validate that we considered every parameter
+        param_dict = {pn: p for pn, p in self.named_parameters()}
+        inter_params = decay & no_decay
+        union_params = decay | no_decay
+        assert len(inter_params) == 0, "parameters %s made it into both decay/no_decay sets!" % (str(inter_params),)
+        assert len(
+            param_dict.keys() - union_params) == 0, "parameters %s were not separated into either decay/no_decay set!" \
+                                                    % (str(param_dict.keys() - union_params),)
+
+        # create the pytorch optimizer object
+        optim_groups = [
+            {"params": [param_dict[pn] for pn in sorted(list(decay))], "weight_decay": train_config.weight_decay},
+            {"params": [param_dict[pn] for pn in sorted(list(no_decay))], "weight_decay": 0.0},
+        ]
+        optimizer = torch.optim.AdamW(optim_groups, lr=train_config.learning_rate, betas=train_config.betas)
+        return optimizer
+
+
+class Decoder(nn.Module):
+    def __init__(self, input_channel=512, output_channel=512):
+        super().__init__()
+
+        self.input_channel = input_channel
+        self.out_channel = output_channel
+        self.down_rate = 3
+        self.stride = 2
+        self.width = 512
+        self.depth = 3
+        self.m_conv = 1.0
+        self.chanel_num = 3
+
+        kernel_size, pad = self.stride * 2, self.stride // 2
+
+        blocks = []
+
+        block = nn.Conv1d(in_channels=self.input_channel, out_channels=self.width, kernel_size=3, stride=1, padding=1)
+        blocks.append(block)
+
+        for i in range(self.down_rate):
+            block = nn.Sequential(
+                Resnet1D(n_in=self.width, n_depth=self.depth, m_conv=self.m_conv, dilation_growth_rate=1,
+                         dilation_cycle=None, zero_out=False, res_scale=False, checkpoint_res=False),
+
+                nn.ConvTranspose1d(in_channels=self.width, out_channels=self.out_channel if i == (self.down_rate - 1)
+                                    else self.width, kernel_size=kernel_size, stride=2, padding=pad),
+            )
+            blocks.append(block)
+
+        self.model = nn.Sequential(*blocks)
+
+    def forward(self, x):
+        x_in = self.preprocess(x)
+        x_out = self.model(x_in)
+        x_out = self.postprocess(x_out)
+
+        return x_out
+
+    def preprocess(self, x):
+        # x: NTC [-1,1] -> NCT [-1,1]
+        assert len(x.shape) == 3
+        x = x.permute(0, 2, 1).float()
+        return x
+
+    def postprocess(self, x):
+        # x: NTC [-1,1] <- NCT [-1,1]
+        x = x.permute(0, 2, 1)
+        return x
+
+    def configure_optimizers(self, train_config):
+        """
+        This long function is unfortunately doing something very simple and is being very defensive:
+        We are separating out all parameters of the model into two buckets: those that will experience
+        weight decay for regularization and those that won't (biases, and layernorm/embedding weights).
+        We are then returning the PyTorch optimizer object.
+        """
+
+        # separate out all parameters to those that will and won't experience regularizing weight decay
+        decay = set()
+        no_decay = set()
+        whitelist_weight_modules = (torch.nn.Linear,)
+        blacklist_weight_modules = (torch.nn.LayerNorm, torch.nn.Embedding)
+        for mn, m in self.named_modules():
+            for pn, p in m.named_parameters():
+                fpn = '%s.%s' % (mn, pn) if mn else pn  # full param name
+
+                if pn.endswith('bias'):
+                    # all biases will not be decayed
+                    no_decay.add(fpn)
+                elif pn.endswith('weight') and isinstance(m, whitelist_weight_modules):
+                    # weights of whitelist modules will be weight decayed
+                    decay.add(fpn)
+                elif pn.endswith('weight') and isinstance(m, blacklist_weight_modules):
+                    # weights of blacklist modules will NOT be weight decayed
+                    no_decay.add(fpn)
+
+        # special case the position embedding parameter in the root GPT module as not decayed
+        no_decay.add('pos_emb')
+
+        # validate that we considered every parameter
+        param_dict = {pn: p for pn, p in self.named_parameters()}
+        inter_params = decay & no_decay
+        union_params = decay | no_decay
+        assert len(inter_params) == 0, "parameters %s made it into both decay/no_decay sets!" % (str(inter_params),)
+        assert len(
+            param_dict.keys() - union_params) == 0, "parameters %s were not separated into either decay/no_decay set!" \
+                                                    % (str(param_dict.keys() - union_params),)
+
+        # create the pytorch optimizer object
+        optim_groups = [
+            {"params": [param_dict[pn] for pn in sorted(list(decay))], "weight_decay": train_config.weight_decay},
+            {"params": [param_dict[pn] for pn in sorted(list(no_decay))], "weight_decay": 0.0},
+        ]
+        optimizer = torch.optim.AdamW(optim_groups, lr=train_config.learning_rate, betas=train_config.betas)
+        return optimizer
 
 
 class CausalCrossConditionalSelfAttention(nn.Module):
@@ -237,8 +459,8 @@ class CrossCondGPTBase(nn.Module):
         super().__init__()
 
         # # input embedding stem
-        self.tok_emb_up = nn.Embedding(config.vocab_size_up, config.n_embd)
-        self.tok_emb_down = nn.Embedding(config.vocab_size_down, config.n_embd)
+        self.tok_emb_up = nn.Linear(config.vocab_size_up, config.n_embd, bias=False)
+        self.tok_emb_down = nn.Linear(config.vocab_size_down, config.n_embd, bias=False)
         self.pos_emb = nn.Parameter(torch.zeros(1, config.block_size * 3, config.n_embd))
         self.cond_emb = nn.Linear(config.n_music, config.n_embd)
         self.drop = nn.Dropout(config.embd_pdrop)
@@ -311,9 +533,10 @@ class CrossCondGPTBase(nn.Module):
         return optimizer
 
     def forward(self, idx_up, idx_down, cond):
-        b, t = idx_up.size()
+
+        b, t, _ = idx_up.shape
         assert t <= self.block_size, "Cannot forward, model block size is exhausted."
-        b, t = idx_down.size()
+        b, t, _ = idx_down.shape
         assert t <= self.block_size, "Cannot forward, model block size is exhausted."
 
         # forward the GPT model
@@ -321,6 +544,7 @@ class CrossCondGPTBase(nn.Module):
 
         token_embeddings_up = self.tok_emb_up(idx_up)  # each index maps to a (learnable) vector
         token_embeddings_down = self.tok_emb_down(idx_down)  # each index maps to a (learnable) vector
+
         token_embeddings = torch.cat([self.cond_emb(cond), token_embeddings_up, token_embeddings_down], dim=1)
 
         position_embeddings = torch.cat(
@@ -420,12 +644,12 @@ class CrossCondGPTHead(nn.Module):
         logits_down = self.head_down(x[:, t * 2:t * 3, :])  # down half
 
         # if we are given some desired targets also calculate the loss
-        loss_up, loss_down = None, None
+        # loss_up, loss_down = None, None
+        #
+        # if targets is not None:
+        #     targets_up, targets_down = targets
+        #
+        #     loss_up = F.cross_entropy(logits_up.view(-1, logits_up.size(-1)), targets_up.view(-1))
+        #     loss_down = F.cross_entropy(logits_down.view(-1, logits_down.size(-1)), targets_down.view(-1))
 
-        if targets is not None:
-            targets_up, targets_down = targets
-
-            loss_up = F.cross_entropy(logits_up.view(-1, logits_up.size(-1)), targets_up.view(-1))
-            loss_down = F.cross_entropy(logits_down.view(-1, logits_down.size(-1)), targets_down.view(-1))
-
-        return logits_up, logits_down, loss_up, loss_down
+        return logits_up, logits_down

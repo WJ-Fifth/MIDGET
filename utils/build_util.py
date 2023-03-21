@@ -9,7 +9,6 @@ import models
 
 
 def build(config):
-    start_epoch = 0
     model_vqvae, model_gpt = _build_model(config)
     if not (hasattr(config, 'need_not_train_data') and config.need_not_train_data):
         training_data = _build_train_loader(config)
@@ -34,12 +33,19 @@ def _build_model(config):
 
         model_class_gpt = getattr(models, config.structure_generate.name)
         model_gpt = model_class_gpt(config.structure_generate)
+
+        model_vqvae = nn.DataParallel(model_vqvae)
+        model_gpt = nn.DataParallel(model_gpt)
+        return model_vqvae.cuda(), model_gpt.cuda()
+
+    elif hasattr(config.structure, 'name') is False and hasattr(config.structure_generate, 'name'):
+        print(f'using {config.structure_generate.name} ')
+        model_class_gpt = getattr(models, config.structure_generate.name)
+        model_gpt = model_class_gpt(config.structure_generate)
+        model_gpt = nn.DataParallel(model_gpt)
+        return None, model_gpt.cuda()
     else:
         raise NotImplementedError("Wrong Model Selection")
-
-    model_vqvae = nn.DataParallel(model_vqvae)
-    model_gpt = nn.DataParallel(model_gpt)
-    return model_vqvae.cuda(), model_gpt.cuda()
 
 
 def _build_train_loader(config):

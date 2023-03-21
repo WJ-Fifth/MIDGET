@@ -38,6 +38,7 @@ class GPT_BA:
 
         extra = torch.zeros(pred_motions.shape[0])
         extra = extra.unsqueeze(1).to(self.device)
+
         motion_beats_prob = torch.cat((extra, motion_beats_prob), dim=1)
 
         bce_loss = torch.nn.BCELoss()
@@ -70,9 +71,6 @@ class GPT_BA:
         vqvae = self.init_models[0].eval()
         gpt = self.init_models[1].train()
 
-        print(self.get_parameter_number(gpt))
-        print(self.get_parameter_number(vqvae))
-        exit()
 
         data = self.config.data
         training_data = self.training_data
@@ -94,7 +92,6 @@ class GPT_BA:
 
         torch.cuda.manual_seed(config.seed)
 
-
         # Training Loop
         for epoch_i in range(61, config.epoch + 1):
             log.set_progress(epoch_i, len(training_data))
@@ -110,6 +107,7 @@ class GPT_BA:
                 music_beats = music_beats.to(self.device)
 
                 pose_seq[:, :, :3] = 0
+
                 optimizer.zero_grad()
 
                 with torch.no_grad():
@@ -247,16 +245,16 @@ class GPT_BA:
                 quants, up_codebook, down_codebook = vqvae.module.encode(pose_seq)
 
                 if isinstance(quants, tuple):
-                    x = tuple(quants[i][0][:, :1].clone() for i in range(len(quants)))
+                    x = tuple(quants[i][0][:, :29].clone() for i in range(len(quants)))
                 else:
-                    x = quants[0][:, :1].clone()
+                    x = quants[0][:, :29].clone()
 
-                if hasattr(config, 'random_init_test') and config.random_init_test:
-                    if isinstance(quants, tuple):
-                        for iij in range(len(x)):
-                            x[iij][:, 0] = torch.randint(512, (1,))
-                    else:
-                        x[:, 0] = torch.randint(512, (1,))
+                # if hasattr(config, 'random_init_test') and config.random_init_test:
+                #     if isinstance(quants, tuple):
+                #         for iij in range(len(x)):
+                #             x[iij][:, 0] = torch.randint(512, (1,))
+                #     else:
+                #         x[:, 0] = torch.randint(512, (1,))
 
                 zs = gpt.module.sample(xs=x,
                                        cond=music_seq,
@@ -277,4 +275,5 @@ class GPT_BA:
                         zs[ii][0].cpu().data.numpy()[0] for ii in range(len(zs)))
                 else:
                     quants_out[self.dance_names[i_eval]] = zs[0].cpu().data.numpy()[0]
-            visualizeAndWrite(results, config, self.evaldir, self.dance_names, epoch_tested, quants_out, take_img=True)
+
+            visualizeAndWrite(results, config, self.evaldir, self.dance_names, epoch_tested, quants_out, take_img=False)
