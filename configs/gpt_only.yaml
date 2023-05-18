@@ -37,7 +37,7 @@ loss_weight:
 optimizer:
     type: Adam
     kwargs:
-        lr: 0.00005
+        lr: 0.0003
         betas: [0.5, 0.999]
         weight_decay: 0
     schedular_kwargs:
@@ -61,8 +61,8 @@ init_weight: 'experiments/motion_gpt_only_2/ckpt/epoch_200.pt'
 expname: motion_gpt_only_2
 
 
-need_not_train_data: True
-#need_not_test_data: True
+#need_not_train_data: True
+need_not_test_data: True
 
 epoch: 400
 batch_size: 32

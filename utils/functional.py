@@ -164,7 +164,7 @@ def visualize_json(fname_iter, image_dir, dance_name, dance_path, config, quant=
     if quant is not None:
         cv2.putText(img, str(quant[j]), (config.width - 400, 80), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 3)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)
-    # img[np.all(img == [0, 0, 0, 255], axis=2)] = [255, 255, 255, 0]
+    img[np.all(img == [0, 0, 0, 255], axis=2)] = [255, 255, 255, 0]
     img = Image.fromarray(numpy.uint8(img))
     img.save(os.path.join(f'{image_dir}/{dance_name}', f'frame{j:06d}.png'))
 
@@ -387,7 +387,7 @@ def write2json(dances, dance_names, config, expdir, epoch):
                 f.write(frame_json)
 
 
-def visualizeAndWrite(results, config, expdir, dance_names, epoch, quants=None, take_img=False):
+def visualizeAndWrite(results, config, expdir, dance_names, epoch, quants=None, take_img=True):
     if config.rotmat:
         smpl = SMPL(model_path=config.smpl_dir, gender='MALE', batch_size=1)
     np_dances = []
@@ -495,7 +495,7 @@ def visualizeAndWrite(results, config, expdir, dance_names, epoch, quants=None, 
 
     if take_img is True:
         visualize(config.testing, dance_names, expdir, epoch, quants=None)
-        img2video(expdir, epoch)
+        # img2video(expdir, epoch)
 
     json_dir = os.path.join(expdir, "jsons", f"ep{epoch:06d}")
     img_dir = os.path.join(expdir, "imgs", f"ep{epoch:06d}")

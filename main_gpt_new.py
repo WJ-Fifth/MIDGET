@@ -1,6 +1,7 @@
 from training.gpt_new import GPT_CALL
 from training.GPT_BASE import GPT_BASE
 from training.GPT_BA import GPT_BA
+from training.GPT_BA_S import GPT_BA_S
 import argparse
 import yaml
 from easydict import EasyDict
@@ -32,7 +33,7 @@ def main():
 
     config = EasyDict(config)
     # agent = GPT_CALL(config)
-    agent = GPT_BA(config)
+    agent = GPT_BA_S(config)
 
     if args.train:
         agent.train()

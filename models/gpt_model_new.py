@@ -51,8 +51,6 @@ class GPT_Model(nn.Module):
             logit_up, logit_down = logits
             logit_up = logit_up[:, -1, :]
             logit_down = logit_down[:, -1, :]
-            # print("logit up", logit_up.shape)
-            # print("logit down", logit_down.shape)
 
             probs_up = F.softmax(logit_up, dim=-1)
             probs_down = F.softmax(logit_down, dim=-1)
@@ -64,8 +62,6 @@ class GPT_Model(nn.Module):
             x_up = torch.cat((x_up, ix_up), dim=1)
             x_down = torch.cat((x_down, ix_down), dim=1)
 
-        # print("x_up", x_up.shape)
-        # print("x_down", x_down.shape)
         return [x_up], [x_down]
 
     def forward(self, idxs, cond, targets=None):

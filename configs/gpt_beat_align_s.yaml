@@ -50,9 +50,9 @@ structure:
     
     
 structure_generate:
-    name: GPT_Model
+    name: GPT_BA_S_Model
     #ChoreoGrapher Configs
-    ckpt_epoch: 29
+    ckpt_epoch: 25
     base:
         embd_pdrop: 0.1
         resid_pdrop: 0.1
@@ -101,21 +101,22 @@ data:
 testing:
     height: 540
     width: 960
-    ckpt_epoch: 80
+    ckpt_epoch: 75
 
 
 vqvae_weight: 'experiments/sep_vqvae_root/ckpt/epoch_500.pt'
-expname: motion_gpt_new
-
+expname: GPT_BA_BCE_1
+init_weight: 'experiments/GPT_BA_BCE_2/ckpt/epoch_75.pt'
+#init_weight: ''
 
 need_not_train_data: True
 #need_not_test_data: True
 
-epoch: 80
+epoch: 100
 batch_size: 32
 # demo: True
-save_per_epochs: 20
-test_freq: 40
+save_per_epochs: 10
+test_freq: 60
 log_per_updates: 1
 seed: 42
 rotmat: False
@@ -130,3 +131,5 @@ music_normalize: False
 # demo: False
 # sample_code_length: 150
 # analysis_array: [438, 511, 419, 11, 7, 92, 128, 256, 333]
+
+smpl_dir: 'smpl/'

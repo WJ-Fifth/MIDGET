@@ -133,7 +133,7 @@ def calc_and_save_feats(root):
 if __name__ == '__main__':
     gt_root = 'data/aist_features_zero_start'
     # pred_root = 'experiments/motion_gpt_only_2/eval/pkl/ep000360'
-    pred_root = 'experiments/GPT_BA_BCE_1/eval/pkl/ep000040'
+    pred_root = 'experiments/GPT_BA_BCE_2/eval/pkl/ep000070'
 
     print('Calculating and saving features')
     calc_and_save_feats(gt_root)

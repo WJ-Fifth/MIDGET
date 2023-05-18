@@ -10,6 +10,11 @@ from smplx import SMPL
 from scipy.spatial.transform import Rotation as R
 import torch
 
+from scipy.ndimage import gaussian_filter as G
+from scipy.signal import argrelextrema
+
+from scipy.interpolate import interp1d
+
 
 def eye(n, batch_shape):
     iden = np.zeros(np.concatenate[batch_shape, [n, n]])
@@ -40,10 +45,6 @@ def motion_peak_onehot(joints):
     peak_onehot = np.zeros_like(envelope, dtype=bool)
     peak_onehot[peak_idxs] = 1
 
-    # # Second-derivative of the velocity shows the energy of the beats
-    # peak_energy = np.gradient(np.gradient(envelope)) # (seq_len,)
-    # # optimize peaks
-    # peak_onehot[peak_energy<0.001] = 0
     return peak_onehot
 
 
@@ -92,36 +93,74 @@ def get_closest_rotmat(rotmats):
     return r_closest
 
 
+def calc_db(keypoints):
+    kinetic_vel = np.mean(np.sqrt(np.sum((keypoints[1:] - keypoints[:-1]) ** 2, axis=2)), axis=1)
+    kinetic_vel = G(kinetic_vel, 5)
+    motion_beats = argrelextrema(kinetic_vel, np.less)
+    return motion_beats[0], kinetic_vel
+
+
 if __name__ == "__main__":
     FPS = 60
     HOP_LENGTH = 512
     SR = FPS * HOP_LENGTH
-    y, sr = librosa.load('./aist_plusplus_final/all_musics/mJB5.wav', sr=SR)
+    y, sr = librosa.load('./aist_plusplus_final/all_musics/mWA0.wav', sr=SR)
 
     o_env = librosa.onset.onset_strength(y=y, sr=sr)
     tempo, beats = librosa.beat.beat_track(onset_envelope=o_env, sr=sr, hop_length=512)
     times = librosa.times_like(o_env, sr=sr)
     onest_frames = librosa.onset.onset_detect(onset_envelope=o_env, sr=sr)
 
-    motion_result = "./experiments/GPT_BA_BCE_1/eval/pkl/ep000020/gJB_sBM_cAll_d08_mJB5_ch01.json.pkl.npy"
+    motion_result = "./experiments/GPT_BA_BCE_2/eval/pkl/ep000100/gWA_sBM_cAll_d25_mWA0_ch01.npy"
     motion_result = np.load(motion_result, allow_pickle=True).item()['pred_position'][:, :]
     keypoints3d = motion_result.reshape(-1, 24, 3)
     # motion_beats = motion_peak_onehot(keypoints3d)[:2881]
     # motion_beats = motion_peak_onehot(keypoints3d)[15:]
     # motion_beats = motion_peak_onehot(keypoints3d)[:-11]
-    motion_beats = motion_peak_onehot(keypoints3d)[11:]
-
+    # motion_beats = motion_peak_onehot(keypoints3d)[7:]
     pre_times = times
-    # exit()
-    plt.figure(figsize=(14, 5))
+    motion_beats, kinetic_vel = calc_db(keypoints3d)
 
-    plt.plot(times, o_env, label="Onset Strength or envelope")
+    plt.figure(figsize=(8, 3))
+    # plt.rcParams['font.family'] = 'cursive'
+    plt.rcParams['font.weight'] = 'bold'
 
-    plt.vlines(pre_times[motion_beats], 0, o_env.max(), color='r', alpha=0.9,
+    f = interp1d(times, o_env, kind='cubic')
+    smoothed_y = f(times)
+
+    plt.plot(times, o_env, alpha=0.5, label="Onset Strength or envelope")
+
+    # plt.plot(times, smoothed_y, label="Onset Strength or envelope")
+
+    plt.vlines(times[motion_beats[:-10]], ymin=-5, ymax=20, color='m', alpha=0.9,
                linestyle='--', label='motion beats')
-    plt.vlines(times[beats], 0, o_env.max(), color='g', alpha=0.5,
+    plt.vlines(times[beats], ymin=-5, ymax=20, color='g', alpha=0.9,
                linestyle='--', label='music beats')
-    plt.legend()
 
-    plt.xlim(15, 25)
+    plt.ylim(-5, 25)
+    plt.xlim(10, 15)
+
+    plt.tight_layout()
+    plt.legend(frameon=False, ncol=3, loc='upper center')
+    plt.yticks([])
+    # plt.axis('off')
+
+    plt.gca().spines['top'].set_visible(False)
+    plt.gca().spines['right'].set_visible(False)
+
+    plt.gca().spines['left'].set_visible('zero')
+    plt.gca().spines['bottom'].set_position('zero')
+
+    plt.xlabel('time', loc='right')
+    plt.ylabel('dance velocity', loc='top')
+
+    plt.xticks([])
+
+    # arrow_props = dict(arrowstyle='->', color='black')
+    #
+    # plt.annotate('Annotation Text', xy=(0, 25), xytext=(3, -2),
+    #              arrowprops=arrow_props)
+    # plt.annotate('Annotation Text', xy=(40, 0), xytext=(3, -2),
+    #              arrowprops=arrow_props)
+
     plt.show()

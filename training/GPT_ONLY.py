@@ -110,12 +110,14 @@ class GPT_ONLY:
 
                 assert all(param.grad is not None for param in gpt.parameters()), \
                     'loss should depend differentiably on all neural network weights'
+
                 # update parameters
                 optimizer.step()
 
                 stats = {'updates': updates, 'loss': loss.item(), 'BA_loss': ba_loss.item(),
                          'Rec_loss': rec_loss.item(), 'velocity_loss': velocity_loss.item(),
-                         'acceleration_loss': acceleration_loss.item(), "Root loss": (root_rec_loss + root_acc_loss).item()}
+                         'acceleration_loss': acceleration_loss.item(),
+                         "Root loss": 0.5 * (root_rec_loss + root_acc_loss).item()}
 
                 log.update(stats)
                 updates += 1

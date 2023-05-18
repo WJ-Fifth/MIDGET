@@ -16,7 +16,7 @@ from torch.nn import functional as F
 from .resnet import Resnet1D
 
 
-class GPT_BA_Model(nn.Module):
+class GPT_BA_S_Model(nn.Module):
     """  the full GPT language model, with a context size of block_size """
 
     def __init__(self, config):
@@ -51,15 +51,13 @@ class GPT_BA_Model(nn.Module):
         return (probs_up_codes, probs_down_codes), (idx_up, idx_down)
 
     def sample(self, xs, cond, shift=None, codebooks=None):
-        block_size = self.get_block_size()
-
+        block_size = self.get_block_size() - 1
         if shift is not None:
             block_shift = min(shift, block_size)
         else:
             block_shift = block_size
         x_up, x_down = xs
-
-        for k in range(25, cond.size(1) // 8):
+        for k in range(29, cond.size(1) // 8):
             x_cond_up = x_up if x_up.size(1) <= block_size else x_up[:, -(
                     block_shift + (k - block_size - 1) % (block_size - block_shift + 1)):]
             x_cond_down = x_down if x_down.size(1) <= block_size else x_down[:, -(
@@ -72,9 +70,8 @@ class GPT_BA_Model(nn.Module):
             # jj += 1
             # pluck the logits at the final step and scale by temperature
             logit_up, logit_down = logits
-
-            ix_up = logit_up[:, -5, :]
-            ix_down = logit_down[:, -5, :]
+            ix_up = logit_up[:, -1, :]
+            ix_down = logit_down[:, -1, :]
 
             # append to the sequence and continue
             x_up = torch.cat((x_up, ix_up), dim=1)
@@ -90,15 +87,12 @@ class GPT_BA_Model(nn.Module):
         else:
             (up_codebook, down_codebook) = None, None
 
+        (targets_up, targets_down) = None, None
         if targets is not None:
             targets_up, targets_down = targets
-        else:
-            (targets_up, targets_down) = None, None
 
         # print(cond.shape)
-        music_feature = self.music_downsample(cond)
-        # music_feature = self.music_downsample(cond[:, :232])
-
+        music_feature = self.music_downsample(cond[:, :232])
         # if music_feature.shape[0] > 1:
         #     print(music_feature.shape)
         #     input_music_feature = music_feature[:, :-1]

@@ -2,16 +2,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-# from .encdec import Encoder, Decoder, assert_shape
-# from .bottleneck import NoBottleneck, Bottleneck
-# from .utils.logger import average_metrics
-# from .utils.audio_utils import  audio_postprocess
-
 from .vqvae import VQVAE
 from .vqvae_root import VQVAER
 
 smpl_down = [0, 1, 2, 4, 5, 7, 8, 10, 11]
 smpl_up = [3, 6, 9, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+
 
 class SepVQVAER(nn.Module):
     def __init__(self, hps):
@@ -41,18 +37,13 @@ class SepVQVAER(nn.Module):
         x[:, :, smpl_up] = xup.view(b, t, cup // self.chanel_num, self.chanel_num)
         x[:, :, smpl_down] = xdown.view(b, t, cdown // self.chanel_num, self.chanel_num)
 
-        # output[0] = up_quantised + (output[0] - up_quantised.detach())
-        # output[1] = down_quantised + (output[1] - up_quantised.detach())
-        #
-        # up_quantised = output[0] + (up_quantised - output[0]).detach()
-        # down_quantised = output[1] + (down_quantised - output[1]).detach()
-
         return x.view(b, t, -1)
 
     def encode(self, x, start_level=0, end_level=None, bs_chunks=1):
         b, t, c = x.size()
-        zup, up_codebook = self.vqvae_up.encode(x.view(b, t, c // self.chanel_num, self.chanel_num)[:, :, smpl_up].view(b, t, -1),
-                                   start_level, end_level, bs_chunks)
+        zup, up_codebook = self.vqvae_up.encode(
+            x.view(b, t, c // self.chanel_num, self.chanel_num)[:, :, smpl_up].view(b, t, -1),
+            start_level, end_level, bs_chunks)
 
         zdown, down_codebook = self.vqvae_down.encode(
             x.view(b, t, c // self.chanel_num, self.chanel_num)[:, :, smpl_down].view(b, t, -1), start_level, end_level,

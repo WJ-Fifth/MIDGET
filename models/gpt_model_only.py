@@ -51,7 +51,7 @@ class GPT_ONLY(nn.Module):
             cond_input = cond[:, :(k + 1) * 8] if k < block_size else cond[:, (k - (
                     block_shift + (k - block_size - 1) % (block_size - block_shift + 1)) + 1) * 8: (k + 1) * 8]
 
-            # print(x_cond.shape)
+            # print(x_cond.shape
             # print(cond_input.shape)
             preds, _ = self.forward(x_cond, cond_input)
             # jj += 1

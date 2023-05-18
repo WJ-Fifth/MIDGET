@@ -23,7 +23,7 @@ warnings.filterwarnings('ignore')
 smpl_down = [0, 1, 2, 4, 5, 7, 8, 10, 11]
 smpl_up = [3, 6, 9, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
 
-class GPT_BA:
+class GPT_BA_S:
     def __init__(self, args):
         self.device = None
         self.config = args
@@ -34,7 +34,7 @@ class GPT_BA:
 
     def BCE_Loss(self, pred_motions, music_beats):
         l2_distance = torch.mean(torch.square(pred_motions[:, :-1, :] - pred_motions[:, 1:, :]), dim=-1)
-        motion_beats_prob = torch.exp(-l2_distance / 3 ** 2)
+        motion_beats_prob = torch.exp(-l2_distance / 0.05 ** 2)
 
         extra = torch.zeros(pred_motions.shape[0])
         extra = extra.unsqueeze(1).to(self.device)
@@ -59,9 +59,6 @@ class GPT_BA:
 
         ba_loss = torch.mean(torch.square(music_beats - motion_beats_prob))
         return ba_loss
-
-    def l2_loss_fn(self, x_target, x_pred):
-        return torch.mean(torch.square(x_pred - x_target))
 
     def get_parameter_number(self, model):
         total_num = sum(p.numel() for p in model.parameters())
@@ -95,10 +92,6 @@ class GPT_BA:
 
         torch.cuda.manual_seed(config.seed)
 
-        motion_len = config.structure_generate.block_size
-        motion_split = 30 - motion_len
-        losses = []
-
         # Training Loop
         for epoch_i in range(61, config.epoch + 1):
             log.set_progress(epoch_i, len(training_data))
@@ -121,16 +114,18 @@ class GPT_BA:
                     quants_pred, up_codebook, down_codebook = vqvae.module.encode(pose_seq)
                     if isinstance(quants_pred, tuple):
                         quants_input = tuple(
-                            quants_pred[index][0][:, :-motion_split].clone().detach() for index in range(len(quants_pred)))
+                            quants_pred[index][0][:, :-1].clone().detach() for index in range(len(quants_pred)))
                         quants_target = tuple(
-                            quants_pred[index][0][:, motion_split:].clone().detach() for index in range(len(quants_pred)))
+                            quants_pred[index][0][:, 1:].clone().detach() for index in range(len(quants_pred)))
                     else:
                         quants = quants_pred[0]
-                        quants_input = quants[:, :-5].clone().detach()
-                        quants_target = quants[:, 5:].clone().detach()
+                        quants_input = quants[:, :-1].clone().detach()
+                        quants_target = quants[:, 1:].clone().detach()
 
-                output, joints_index, ce_loss = gpt(quants_input, music_seq[:, :motion_len*8], quants_target,
-                                                    (up_codebook, down_codebook))
+                # print("up joint codebook", up_codebook.shape)
+                # print("down joint codebook", down_codebook.shape)
+
+                output, joints_index, ce_loss = gpt(quants_input, music_seq, quants_target, (up_codebook, down_codebook))
                 up_idx, down_idx = joints_index
                 up_idx, down_idx = up_idx.permute(0, 2, 1).long().contiguous(), \
                     down_idx.permute(0, 2, 1).long().contiguous()
@@ -140,11 +135,12 @@ class GPT_BA:
                 # x_quantised[0] = output[0] + (x_quantised[0] - output[0]).detach()
                 # x_quantised[1] = output[1] + (x_quantised[1] - output[1]).detach()
 
-                ba_loss = self.BCE_Loss(pose_sample, music_beats[:, motion_split*8:])
+                ba_loss = self.BCE_Loss(pose_sample, music_beats[:, 8:])
 
                 loss = ba_loss + ce_loss
 
                 loss.backward()
+
 
                 # for param, name in zip(gpt.parameters(), gpt.named_parameters()):
                 #     if param.grad is not None:
@@ -163,11 +159,6 @@ class GPT_BA:
 
                 log.update(stats)
                 updates += 1
-
-                losses.append(loss.item())
-            total_loss = np.mean(losses)
-
-            print("The total loss in single epoch:  %.4f" % total_loss)
 
             checkpoint = {'model': gpt.state_dict(), 'config': config, 'epoch': epoch_i}
 
@@ -254,9 +245,9 @@ class GPT_BA:
                 quants, up_codebook, down_codebook = vqvae.module.encode(pose_seq)
 
                 if isinstance(quants, tuple):
-                    x = tuple(quants[i][0][:, :25].clone() for i in range(len(quants)))
+                    x = tuple(quants[i][0][:, :29].clone() for i in range(len(quants)))
                 else:
-                    x = quants[0][:, :25].clone()
+                    x = quants[0][:, :29].clone()
 
                 # if hasattr(config, 'random_init_test') and config.random_init_test:
                 #     if isinstance(quants, tuple):

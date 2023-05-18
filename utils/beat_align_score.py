@@ -71,10 +71,25 @@ def alignment_score(music_beats, motion_beats, sigma=3):
 def calc_ba_score(root):
     bc_scores = []
     ba_scores = []
-    best_score = 0.3
-    lowest_score = 0.15
+    best_score = 0.35
+    lowest_score = 0.20
     best_motion = []
     lowest_motion = []
+
+    BC_best = []
+
+    BC_lowest = []
+
+    BR = []
+    HO = []
+    JB = []
+    JS = []
+    KR = []
+    LH = []
+    LO = []
+    MH = []
+    PO = []
+    WA = []
 
     for pkl in os.listdir(root):
         if os.path.isdir(os.path.join(root, pkl)):
@@ -90,29 +105,81 @@ def calc_ba_score(root):
         ba_scores.append(single_score)
         bc_scores.append(bc_score)
 
-        if single_score > best_score:
-            best_motion.append(pkl)
+        if pkl[1:3] == 'BR':
+            BR.append(bc_score)
+        elif pkl[1:3] == 'HO':
+            HO.append(bc_score)
+        elif pkl[1:3] == 'JB':
+            JB.append(bc_score)
+        elif pkl[1:3] == 'JS':
+            JS.append(bc_score)
+        elif pkl[1:3] == 'KR':
+            KR.append(bc_score)
+        elif pkl[1:3] == 'LH':
+            LH.append(bc_score)
+        elif pkl[1:3] == 'LO':
+            LO.append(bc_score)
+        elif pkl[1:3] == 'MH':
+            MH.append(bc_score)
+        elif pkl[1:3] == 'PO':
+            PO.append(bc_score)
+        elif pkl[1:3] == 'WA':
+            WA.append(bc_score)
 
-        if single_score < lowest_score:
-            lowest_motion.append(pkl)
-
-    print("best")
-    print(best_motion)
-    print("lowest")
-    print(lowest_motion)
-
-    print(len(ba_scores))
+    print("BR:", np.mean(BR))
+    print("HO:", np.mean(HO))
+    print("JB:", np.mean(JB))
+    print("JS", np.mean(JS))
+    print("KR", np.mean(KR))
+    print("LH", np.mean(LH))
+    print("LO", np.mean(LO))
+    print("MH", np.mean(MH))
+    print("PO", np.mean(PO))
+    print("WA", np.mean(WA))
+    #     if single_score > best_score:
+    #         best_motion.append(pkl)
+    #         BC_best.append(bc_score)
+    #
+    #     if single_score < lowest_score:
+    #         lowest_motion.append(pkl)
+    #         BC_lowest.append(bc_score)
+    #
+    # print("best")
+    # print(best_motion)
+    # print(BC_best)
+    # print("lowest")
+    # print(lowest_motion)
+    # print(BC_lowest)
 
     return np.mean(ba_scores), np.mean(bc_scores)
 
 
+def freeze_decision(root):
+    for pkl in os.listdir(root):
+        if os.path.isdir(os.path.join(root, pkl)):
+            continue
+        joint3d = np.load(os.path.join(root, pkl), allow_pickle=True).item()['pred_position'][:, :]
+
+        dance_beats, length = calc_db(joint3d, pkl)
+
+        base_beats = dance_beats[:-1]
+        next_beats = dance_beats[1:]
+        count = np.count_nonzero((next_beats - base_beats) < 10)
+        if count >= len(dance_beats) / 10:
+            print(pkl)
+            print(dance_beats)
+
+
 if __name__ == '__main__':
-    # pred_root = './experiments/actor_critic/eval/pkl/ep000010'
+    pred_root = './experiments/actor_critic_new/eval/pkl/ep000001'
     # pred_root = './experiments/motion_gpt_new/vis/pkl/ep000040'
     # pred_root = './experiments/motion_gpt_new/vis/pkl/ep000080'
 
-    pred_root = './experiments/GPT_BA_BCE_1/eval/pkl/ep000040'
+    # pred_root = './experiments/GPT_BA_BCE_2/eval/pkl/ep000100'
     # pred_root = 'experiments/motion_gpt_only_2/eval/pkl/ep000080'
+
+    # freeze_decision(pred_root)
+    # exit()
 
     ba_scores, bc_scores = calc_ba_score(pred_root)
 
