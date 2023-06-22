@@ -17,6 +17,7 @@ from models import gpt_model_ba, vqvae_root
 
 from scipy.ndimage import gaussian_filter
 import numpy as np
+import matplotlib.pyplot as plt
 
 warnings.filterwarnings('ignore')
 
@@ -241,6 +242,31 @@ class GPT_BA:
             checkpoint = torch.load(ckpt_path)
             gpt.load_state_dict(checkpoint['model'])
             # gpt.eval()
+
+
+            # # 获取Positional Embedding的权重矩阵
+            #
+            # pos_embedding_weights = (gpt.module.gpt_base.pos_emb.data).cpu()
+            # pos_emb = pos_embedding_weights.reshape(75, 768)
+            #
+            # # 创建热图并显示位置编码
+            # fig, ax = plt.subplots(figsize=(15, 5))  # 设置图像大小为 8x6
+            # im = ax.imshow(pos_emb, cmap='viridis')
+            # cbar = ax.figure.colorbar(im, ax=ax)
+            #
+            # # 设置图像标题和坐标轴标签
+            # ax.set_aspect(768 / 150)
+            # ax.set_title('Positional Embedding Heatmap')
+            # ax.set_xlabel('Embedding Dimension')
+            # ax.set_ylabel('Position')
+            #
+            # # 调节 x 轴和 y 轴的刻度标签大小
+            # ax.tick_params(axis='x', labelsize=8)
+            # ax.tick_params(axis='y', labelsize=8)
+            #
+            # # 显示图像
+            # plt.show()
+            # exit()
 
             results = []
             # quants = {}

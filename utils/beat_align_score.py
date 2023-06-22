@@ -171,11 +171,11 @@ def freeze_decision(root):
 
 
 if __name__ == '__main__':
-    pred_root = './experiments/actor_critic_new/eval/pkl/ep000001'
+    # pred_root = './experiments/actor_critic_new/eval/pkl/ep000001'
     # pred_root = './experiments/motion_gpt_new/vis/pkl/ep000040'
     # pred_root = './experiments/motion_gpt_new/vis/pkl/ep000080'
 
-    # pred_root = './experiments/GPT_BA_BCE_2/eval/pkl/ep000100'
+    pred_root = './experiments/GPT_BA_BCE_2/eval/pkl/ep000100'
     # pred_root = 'experiments/motion_gpt_only_2/eval/pkl/ep000080'
 
     # freeze_decision(pred_root)

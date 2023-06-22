@@ -533,7 +533,7 @@ class Actor_Critic:
 #     def _dir_setting(self):
 #         data = self.config.data
 #         self.expname = self.config.expname
-#         self.experiment_dir = os.path.join("../GMWM/", "experiments")
+#         self.experiment_dir = os.path.join("../MIDGET/", "experiments")
 #         self.expdir = os.path.join(self.experiment_dir, self.expname)
 #
 #         if not os.path.exists(self.expdir):

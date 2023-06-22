@@ -33,7 +33,7 @@ def main():
 
     config = EasyDict(config)
     # agent = GPT_CALL(config)
-    agent = GPT_BA_S(config)
+    agent = GPT_BA(config)
 
     if args.train:
         agent.train()

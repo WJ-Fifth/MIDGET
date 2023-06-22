@@ -987,7 +987,7 @@ def pkl_to_19point(pkl_root, config=None):
 def dir_setting(config):
     data = config.data
     expname = config.expname
-    experiment_dir = os.path.join("../GMWM/", "experiments")
+    experiment_dir = os.path.join("../MIDGET/", "experiments")
     expdir = os.path.join(experiment_dir, expname)
 
     if not os.path.exists(expdir):

@@ -101,7 +101,7 @@ data:
 testing:
     height: 540
     width: 960
-    ckpt_epoch: 75
+    ckpt_epoch: 100
 
 
 vqvae_weight: 'experiments/sep_vqvae_root/ckpt/epoch_500.pt'
@@ -110,7 +110,7 @@ init_weight: 'experiments/GPT_BA_BCE_2/ckpt/epoch_75.pt'
 #init_weight: ''
 
 need_not_train_data: True
-#need_not_test_data: True
+need_not_test_data: True
 
 epoch: 100
 batch_size: 32
